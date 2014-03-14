@@ -1,4 +1,14 @@
+{-# LANGUAGE DeriveDataTypeable        #-}
+{-# LANGUAGE DeriveGeneric             #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleContexts          #-}
+{-# LANGUAGE FlexibleInstances         #-}
+{-# LANGUAGE GADTs                     #-}
+{-# LANGUAGE MultiParamTypeClasses     #-}
 {-# LANGUAGE TemplateHaskell           #-}
+{-# LANGUAGE TypeFamilies              #-}
+{-# LANGUAGE TypeSynonymInstances      #-}
+{-# LANGUAGE ViewPatterns              #-}
 
 ----------------------------------------------------------------------------
 -- |
@@ -26,6 +36,7 @@ import           Control.Monad.Trans             (lift)
 import           Control.Monad.StateStack
 import           Data.Default.Class
 import qualified Data.Foldable                   as F
+import           Data.Maybe                      (fromJust, fromMaybe)
 import           Data.Typeable
 
 -- | This data declaration is simply used as a token to distinguish
@@ -137,9 +148,30 @@ renderRTree (Node _ ts)              = F.foldMap renderRTree ts
 renderC :: (Renderable a Cairo, V a ~ R2) => a -> RenderM ()
 renderC = runC . render Cairo
 
+rasterificsStrokeStyle :: Style v -> (Float, Join, (Cap, Cap), DashPattern)
+rasterificsStrokeStyle s = (strokeWidth, strokeJoin, strokCaps, dashPattern)
+  where
+    strokeWidth = fromJust . getLineWidth
+    strokeJoin = fromJust . fromLineJoin . getLineJoin
+    strokeCaps = (c, c)
+    c = fromJust . fromLineCap . getLineCap
+    dashPattern = [5, 10, 5]
+
 -- | Get an accumulated style attribute from the render monad state.
 getStyleAttrib :: AttributeClass a => (a -> b) -> RenderM (Maybe b)
 getStyleAttrib f = (fmap f . getAttr) <$> use accumStyle
+
+-- XXX should handle opacity in a more straightforward way, using
+-- cairo's built-in support for transparency?  See also
+-- https://github.com/diagrams/diagrams-cairo/issues/15 .
+setSourceColor :: Maybe (AlphaColour Double) -> RenderM ()
+setSourceColor Nothing  = return ()
+setSourceColor (Just c) = do
+    o <- fromMaybe 1 <$> getStyleAttrib getOpacity
+    liftR (R.withTexture $ uniformTexture drawColor)
+  where
+    drawColor = PixelRGBA8 r g b a
+    (r,g,b,a) = colorToSRGBA c
 
 -- | Handle those style attributes for which we can immediately emit
 --   cairo instructions as we encounter them in the tree (clip, font
