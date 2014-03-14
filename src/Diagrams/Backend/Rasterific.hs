@@ -39,6 +39,8 @@ import qualified Data.Foldable                   as F
 import           Data.Maybe                      (fromJust, fromMaybe)
 import           Data.Typeable
 
+import           System.FilePath                 (takeExtension)
+
 -- | This data declaration is simply used as a token to distinguish
 --   the Rasterific backend: (1) when calling functions where the type
 --   inference engine would otherwise have no way to know which
@@ -70,11 +72,11 @@ instance Default RasterificState where
 -- | The custom monad in which intermediate drawing options take
 --   place; 'Graphics.Rasterific.Drawing' is Rasterific's own rendering
 --   monad.
-type RenderM a = SS.StateStackT CairoState RenderR a
+type RenderM a = SS.StateStackT RasterificState RenderR a
 
 type RenderR a = R.Drawing PixelRGBA8 a
 
-liftR :: RenderR a -> RenderM px a
+liftR :: RenderR a -> RenderM a
 liftR = lift
 
 runRenderM :: RenderM a -> RenderR a
@@ -144,26 +146,33 @@ renderRTree (Node (RFrozenTr tr) ts) = R $ do
   restore
 renderRTree (Node _ ts)              = F.foldMap renderRTree ts
 
--- | Render an object that the cairo backend knows how to render.
-renderC :: (Renderable a Cairo, V a ~ R2) => a -> RenderM ()
-renderC = runC . render Cairo
+-- | Render an object that the Rasterific backend knows how to render.
+renderR :: (Renderable a Rasterific, V a ~ R2) => a -> RenderM ()
+renderR = runR . render Rasterific
 
-rasterificsStrokeStyle :: Style v -> (Float, Join, (Cap, Cap), DashPattern)
-rasterificsStrokeStyle s = (strokeWidth, strokeJoin, strokCaps, dashPattern)
+rasterificStrokeStyle :: Style v -> (Float, Join, (Cap, Cap), DashPattern)
+rasterificStrokeStyle s = (strokeWidth, strokeJoin, strokCaps, dashPattern)
   where
-    strokeWidth = fromJust . getLineWidth
-    strokeJoin = fromJust . fromLineJoin . getLineJoin
-    strokeCaps = (c, c)
-    c = fromJust . fromLineCap . getLineCap
+    strokeWidth = fromMaybe 0.01 (getLineWidth <$> getAttr s)
+    strokeJoin = fromMaybe (R.JoinMiter 0) (fromLineJoin . getLineJoin <$> getAttr s)
+    strokeCaps = (strokeCap, strokeCap)
+    strokeCap = fromMaybe (R.CapStraight 0) (fromLineCap . getLineCap <$> getAttr s)
     dashPattern = [5, 10, 5]
+
+fromLineCap :: LineCap -> R.Cap
+fromLineCap LineCapButt   = R.CapStraight 0
+fromLineCap LineCapRound  = R.CapRound
+fromLineCap LineCapSquare = R.CapStraight 1
+
+fromLineJoin :: LineJoin -> R.Join
+fromLineJoin LineJoinMiter = R.JoinMiter 0
+fromLineJoin LineJoinRound = R.JoinRound
+fromLineJoin LineJoinBevel = R.JoinMiter 1
 
 -- | Get an accumulated style attribute from the render monad state.
 getStyleAttrib :: AttributeClass a => (a -> b) -> RenderM (Maybe b)
 getStyleAttrib f = (fmap f . getAttr) <$> use accumStyle
 
--- XXX should handle opacity in a more straightforward way, using
--- cairo's built-in support for transparency?  See also
--- https://github.com/diagrams/diagrams-cairo/issues/15 .
 setSourceColor :: Maybe (AlphaColour Double) -> RenderM ()
 setSourceColor Nothing  = return ()
 setSourceColor (Just c) = do
@@ -173,32 +182,45 @@ setSourceColor (Just c) = do
     drawColor = PixelRGBA8 r g b a
     (r,g,b,a) = colorToSRGBA c
 
--- | Handle those style attributes for which we can immediately emit
---   cairo instructions as we encounter them in the tree (clip, font
---   size, fill rule, line width, cap, join, and dashing).  Other
---   attributes (font face, slant, weight; fill color, stroke color,
---   opacity) must be accumulated.
-rasterificStyle :: Style v -> RenderM ()
-rasterificStyle s =
-  sequence_
-  . catMaybes $ [ handle clip
-                , handle fSize
-                , handle lFillRule
-                , handle lWidth
-                , handle lCap
-                , handle lJoin
-                , handle lDashing
-                ]
-  where handle :: AttributeClass a => (a -> RenderM ()) -> Maybe (RenderM ())
-        handle f = f `fmap` getAttr s
-        clip       = mapM_ (\p -> rasterificPath p >> liftC R.clip) . op Clip
-        fSize      = liftR . XXX . getFontSize
-        lFillRule  = liftR . XXX . fromFillRule . getFillRule
-        lWidth     = liftR . XXX . getLineWidth
-        lCap       = liftR . XXX . fromLineCap . getLineCap
-        lJoin      = liftR . XXX . fromLineJoin . getLineJoin
-        lDashing (getDashing -> Dashing ds offs) =
-          liftR $ XXX ds offs
+renderSeg :: Segment Closed R2 -> R.PathCommand
+  renderSeg  (Linear (OffsetClosed (unr2 -> (x,y))) = R.PathLineTo (V2 x y)
+  renderSeg  (Cubic (unr2 -> (x1,y1))
+                    (unr2 -> (x2,y2))
+                    (OffsetClosed (unr2 -> (x3,y3)))) =
+    R.PathCubicBezierCurveTo (V2 x1 y1) (V2 x2 y2) (V2 x3 y3)
 
--- |
-rasterificTransf :: T2 -> RenderR ()
+renderTrail :: Located (Trail R2) -> [R.Primitives]
+  renderTrail (viewLoc -> (unp2 -> (x,y), t)) =
+    pathToPrimitives $ withTrail (renderLine t) (renderLoop t)
+    where
+      renderLine l = R.Path (V2 x y) False (map renderSeg (lineSegments l))
+      renderLoop lp = case loopSegments lp of
+        (segs, Linear _) -> R.Path (V2 x y) False (map renderSeg segs)
+        _ -> R.Path (V2 x y) True (map renderSeg (lineSegments . cutLoop $ lp))
+
+instance Renderable (Path R2) Rasterific where
+  render _ p = R $ do
+    f <- getStyleAttrib (toAlphaColour . getFillColor)
+    s <- getStyleAttrib (toAlphaColour . getLineColor)
+    ign <- use ignoreFill
+    setSourceColor f
+    when (isJust f && not ign) $ liftR R.fill prims
+    setSourceColor s
+    sty <- use accumStyle
+    liftR R.stroke l j c prims
+    where
+      prims = map renderTrail (op Path p)
+      (l, j, c, _) = rasterificStrokeStyle sty
+
+instance Renderable (Segment Closed R2) Rasterific where
+  render c = render c . (fromSegments :: [Segment Closed R2] -> Path R2) . (:[])
+
+instance Renderable (Trail R2) Rasterific where
+  render c = render c . pathFromTrail
+
+renderRasterifc :: FilePath -> SizeSpec2D -> Diagram Rasterific R2 -> IO ()
+renderRasterifc outFile sizeSpec d =
+  fst (renderDia Rasterific (RasterificOptions outFile sizeSpec outTy False) d)
+  where
+    outTy = case takeExtension outFile of
+      _ -> PNG
