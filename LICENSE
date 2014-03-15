@@ -1,16 +1,4 @@
-Copyright 2014 diagrams-cairo team:
-
-  Daniel Bergey <bergey@alum.mit.edu>
-  Sam Griffin <sam.griffin@gmail.com>
-  Niklas Haas <nand@lavabit.com>
-  John Lato <jwlato@gmail.com>
-  Jeffrey Rosenbluth <Jeffrey.Rosenbluth@gmail.com>
-  Ian Ross <ian@skybluetrades.net>
-  Michael Sloan <mgsloan@gmail.com>
-  Luite Stegeman <stegeman@gmail.com>
-  Kanchalai Suveepattananont <ksuvee@seas.upenn.edu>
-  Ryan Yates <fryguybob@gmail.com>
-  Brent Yorgey <byorgey@cis.upenn.edu>
+Copyright (c) 2014, Jeffrey Rosenbluth
 
 All rights reserved.
 
@@ -25,7 +13,7 @@ modification, are permitted provided that the following conditions are met:
       disclaimer in the documentation and/or other materials provided
       with the distribution.
 
-    * Neither the name of Brent Yorgey nor the names of other
+    * Neither the name of Jeffrey Rosenbluth nor the names of other
       contributors may be used to endorse or promote products derived
       from this software without specific prior written permission.
 

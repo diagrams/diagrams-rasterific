@@ -18,26 +18,37 @@
 -- Maintainer  :  diagrams-discuss@googlegroups.com
 --
 -----------------------------------------------------------------------------
-module Diagrams.Backend.Rasterific where
+module Diagrams.Backend.Rasterific
+  ( Rasterific(..) -- rendering token
+  , B
+  , Options(..)
+
+  , renderRasterifc
+  ) where
 
 import           Diagrams.Core.Compile           (RNode (..), RTree, toRTree)
 import           Diagrams.Core.Transform
 
-import           Diagrams.Prelude                hiding (opacity, view)
+import           Diagrams.Prelude                hiding (opacity, view, Image)
 import           Diagrams.TwoD.Adjust            (adjustDia2D,
                                                   setDefault2DAttributes)
 import           Diagrams.TwoD.Path              (Clip (Clip), getFillRule)
 import           Diagrams.TwoD.Size              (requiredScaleT)
 
 import qualified Graphics.Rasterific             as R
+import           Graphics.Rasterific.Texture     (uniformTexture)
+import           Codec.Picture                   (PixelRGBA8 (..), Image (..))
 
 import           Control.Lens                    hiding (transform, ( # ))
+import           Control.Monad                   (when)
 import           Control.Monad.Trans             (lift)
 import           Control.Monad.StateStack
 import           Data.Default.Class
 import qualified Data.Foldable                   as F
-import           Data.Maybe                      (fromJust, fromMaybe)
+import           Data.Maybe                      (isJust, fromMaybe)
+import           Data.Tree
 import           Data.Typeable
+import           GHC.Generics                    (Generic)
 
 import           System.FilePath                 (takeExtension)
 
@@ -51,17 +62,13 @@ data Rasterific = Rasterific
 
 type B = Rasterific
 
-data OutputType =
-    PNG         -- ^ Portable Network Graphics output.
-  deriving (Eq, Ord, Read, Show, Bounded, Enum, Typeable, Generic)
-
 data RasterificState =
   RasterificState { _accumStyle :: Style R2
                     -- ^ The current accumulated style.
                   , _ignoreFill :: Bool
                   }
 
-makeLenes ''RasterificState
+makeLenses ''RasterificState
 
 instance Default RasterificState where
   def = RasterificState
@@ -72,7 +79,7 @@ instance Default RasterificState where
 -- | The custom monad in which intermediate drawing options take
 --   place; 'Graphics.Rasterific.Drawing' is Rasterific's own rendering
 --   monad.
-type RenderM a = SS.StateStackT RasterificState RenderR a
+type RenderM a = StateStackT RasterificState RenderR a
 
 type RenderR a = R.Drawing PixelRGBA8 a
 
@@ -80,41 +87,28 @@ liftR :: RenderR a -> RenderM a
 liftR = lift
 
 runRenderM :: RenderM a -> RenderR a
-runRenderM = flip SS.evalStateStackT def
+runRenderM = flip evalStateStackT def
 
 instance Backend Rasterific R2 where
   data Render  Rasterific R2 = R (RenderM ())
-  type Result  Rasterific R2 = (IO (), RenderR ())
+  type Result  Rasterific R2 = Image PixelRGBA8
   data Options Rasterific R2 = RasterificOptions
           { _rasterificFileName      :: String     -- ^ The name of the file you want generated
           , _rasterificSizeSpec      :: SizeSpec2D -- ^ The requested size of the output
-          , _rasterificOutputType    :: OutputType -- ^ the output format and associated options
           , _rasterificBypassAdjust  :: Bool    -- ^ Should the 'adjustDia' step be bypassed during rendering?
           }
     deriving (Show)
 
-doRender _ (RasterificOptions file size out _) (R r) = (renderIO, r')
-    where r' = runRenderM r
-          renderIO = do
-            let surfaceF s = C.renderWith s r'
+  doRender _ (RasterificOptions file size out _) (R r) =
+    R.renderDrawing (round w) (round h) PixelRGBA8 r'
+    where
+      r' = runRenderM r
+      (w,h) = case size of
+                Width w'   -> (w',w')
+                Height h'  -> (h',h')
+                Dims w' h' -> (w',h')
+                Absolute   -> (100,100)
 
-                -- Everything except Dims is arbitrary. The backend
-                -- should have first run 'adjustDia' to update the
-                -- final size of the diagram with explicit dimensions,
-                -- so normally we would only expect to get Dims anyway.
-                (w,h) = case size of
-                          Width w'   -> (w',w')
-                          Height h'  -> (h',h')
-                          Dims w' h' -> (w',h')
-                          Absolute   -> (100,100)
-
-            case out of
-              PNG ->
-                C.withImageSurface C.FormatARGB32 (round w) (round h) $ \surface -> do
-                  surfaceF surface
-                  C.surfaceWriteToPNG surface file
-
--- renderData :: Monoid' m => b -> QDiagram b v m -> Render b v
   renderData _ = renderRTree . toRTree
 
   adjustDia c opts d = if _rasterificBypassAdjust opts
@@ -135,13 +129,12 @@ renderRTree :: RTree Rasterific R2 a -> Render Rasterific R2
 renderRTree (Node (RPrim accTr p) _) = render Rasterific (transform accTr p)
 renderRTree (Node (RStyle sty) ts)   = R $ do
   save
-  rasterificStyle sty
   accumStyle %= (<> sty)
   runR $ F.foldMap renderRTree ts
   restore
 renderRTree (Node (RFrozenTr tr) ts) = R $ do
   save
-  liftR $ rasterificTransf tr
+  --liftR $ rasterificTransf tr
   runR $ F.foldMap renderRTree ts
   restore
 renderRTree (Node _ ts)              = F.foldMap renderRTree ts
@@ -150,8 +143,8 @@ renderRTree (Node _ ts)              = F.foldMap renderRTree ts
 renderR :: (Renderable a Rasterific, V a ~ R2) => a -> RenderM ()
 renderR = runR . render Rasterific
 
-rasterificStrokeStyle :: Style v -> (Float, Join, (Cap, Cap), DashPattern)
-rasterificStrokeStyle s = (strokeWidth, strokeJoin, strokCaps, dashPattern)
+rasterificStrokeStyle :: Style v -> (Float, R.Join, (R.Cap, R.Cap), R.DashPattern)
+rasterificStrokeStyle s = (strokeWidth, strokeJoin, strokeCaps, dashPattern)
   where
     strokeWidth = fromMaybe 0.01 (getLineWidth <$> getAttr s)
     strokeJoin = fromMaybe (R.JoinMiter 0) (fromLineJoin . getLineJoin <$> getAttr s)
@@ -176,27 +169,27 @@ getStyleAttrib f = (fmap f . getAttr) <$> use accumStyle
 setSourceColor :: Maybe (AlphaColour Double) -> RenderM ()
 setSourceColor Nothing  = return ()
 setSourceColor (Just c) = do
-    o <- fromMaybe 1 <$> getStyleAttrib getOpacity
-    liftR (R.withTexture $ uniformTexture drawColor)
+  o <- fromMaybe 1 <$> getStyleAttrib getOpacity
+  liftR (R.withTexture $ uniformTexture drawColor)
   where
     drawColor = PixelRGBA8 r g b a
     (r,g,b,a) = colorToSRGBA c
 
 renderSeg :: Segment Closed R2 -> R.PathCommand
-  renderSeg  (Linear (OffsetClosed (unr2 -> (x,y))) = R.PathLineTo (V2 x y)
-  renderSeg  (Cubic (unr2 -> (x1,y1))
-                    (unr2 -> (x2,y2))
-                    (OffsetClosed (unr2 -> (x3,y3)))) =
-    R.PathCubicBezierCurveTo (V2 x1 y1) (V2 x2 y2) (V2 x3 y3)
+renderSeg  (Linear (OffsetClosed (unr2 -> (x,y)))) = R.PathLineTo (R.V2 x y)
+renderSeg  (Cubic (unr2 -> (x1,y1))
+                  (unr2 -> (x2,y2))
+                  (OffsetClosed (unr2 -> (x3,y3)))) =
+  R.PathCubicBezierCurveTo (R.V2 x1 y1) (R.V2 x2 y2) (R.V2 x3 y3)
 
-renderTrail :: Located (Trail R2) -> [R.Primitives]
-  renderTrail (viewLoc -> (unp2 -> (x,y), t)) =
-    pathToPrimitives $ withTrail (renderLine t) (renderLoop t)
-    where
-      renderLine l = R.Path (V2 x y) False (map renderSeg (lineSegments l))
-      renderLoop lp = case loopSegments lp of
-        (segs, Linear _) -> R.Path (V2 x y) False (map renderSeg segs)
-        _ -> R.Path (V2 x y) True (map renderSeg (lineSegments . cutLoop $ lp))
+renderTrail :: Located (Trail R2) -> [R.Primitive]
+renderTrail (viewLoc -> (unp2 -> (x,y), t)) =
+  R.pathToPrimitives $ withTrail (renderLine t) (renderLoop t)
+  where
+    renderLine l = R.Path (R.V2 x y) False (map renderSeg (lineSegments l))
+    renderLoop lp = case loopSegments lp of
+      (segs, Linear _) -> R.Path (R.V2 x y) False (map renderSeg segs)
+      _ -> R.Path (R.V2 x y) True (map renderSeg (lineSegments . cutLoop $ lp))
 
 instance Renderable (Path R2) Rasterific where
   render _ p = R $ do
@@ -207,10 +200,11 @@ instance Renderable (Path R2) Rasterific where
     when (isJust f && not ign) $ liftR R.fill prims
     setSourceColor s
     sty <- use accumStyle
+    let (l, j, c, _) = rasterificStrokeStyle sty
     liftR R.stroke l j c prims
     where
       prims = map renderTrail (op Path p)
-      (l, j, c, _) = rasterificStrokeStyle sty
+
 
 instance Renderable (Segment Closed R2) Rasterific where
   render c = render c . (fromSegments :: [Segment Closed R2] -> Path R2) . (:[])
@@ -220,7 +214,4 @@ instance Renderable (Trail R2) Rasterific where
 
 renderRasterifc :: FilePath -> SizeSpec2D -> Diagram Rasterific R2 -> IO ()
 renderRasterifc outFile sizeSpec d =
-  fst (renderDia Rasterific (RasterificOptions outFile sizeSpec outTy False) d)
-  where
-    outTy = case takeExtension outFile of
-      _ -> PNG
+  renderDia Rasterific (RasterificOptions outFile sizeSpec  False) d
