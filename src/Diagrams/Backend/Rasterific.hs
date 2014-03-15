@@ -50,8 +50,6 @@ import           Data.Tree
 import           Data.Typeable
 import           GHC.Generics                    (Generic)
 
-import           System.FilePath                 (takeExtension)
-
 -- | This data declaration is simply used as a token to distinguish
 --   the Rasterific backend: (1) when calling functions where the type
 --   inference engine would otherwise have no way to know which
