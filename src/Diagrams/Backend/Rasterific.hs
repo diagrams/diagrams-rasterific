@@ -10,25 +10,24 @@
 {-# LANGUAGE TypeSynonymInstances      #-}
 {-# LANGUAGE ViewPatterns              #-}
 
-----------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 -- |
 -- Module      :  Diagrams.Backend.Rasterific
 -- Copyright   :  (c) 2014 diagrams-svg team (see LICENSE)
 -- License     :  BSD-style (see LICENSE)
 -- Maintainer  :  diagrams-discuss@googlegroups.com
 --
------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 module Diagrams.Backend.Rasterific
   ( Rasterific(..) -- rendering token
   , B
   , Options(..)
 
-  , renderRasterifc
+  , renderRasterific
   ) where
 
 import           Diagrams.Core.Compile           (RNode (..), RTree, toRTree)
 import           Diagrams.Core.Transform
-
 import           Diagrams.Prelude                hiding (opacity, view, Image)
 import           Diagrams.TwoD.Adjust            (adjustDia2D,
                                                   setDefault2DAttributes)
@@ -37,18 +36,28 @@ import           Diagrams.TwoD.Size              (requiredScaleT)
 
 import qualified Graphics.Rasterific             as R
 import           Graphics.Rasterific.Texture     (uniformTexture)
-import           Codec.Picture                   (PixelRGBA8 (..), Image (..))
+import           Codec.Picture                   (PixelRGBA8 (..), Image (..)
+                                                 ,writePng)
+import           GHC.Float                       (double2Float)
 
 import           Control.Lens                    hiding (transform, ( # ))
 import           Control.Monad                   (when)
 import           Control.Monad.Trans             (lift)
 import           Control.Monad.StateStack
+
 import           Data.Default.Class
 import qualified Data.Foldable                   as F
 import           Data.Maybe                      (isJust, fromMaybe)
 import           Data.Tree
 import           Data.Typeable
 import           GHC.Generics                    (Generic)
+
+------ Debugging --------------------------------------------------------------
+import Debug.Trace
+
+traceShow' :: Show a => a -> a
+traceShow' x = traceShow x x
+-------------------------------------------------------------------------------
 
 -- | This data declaration is simply used as a token to distinguish
 --   the Rasterific backend: (1) when calling functions where the type
@@ -79,7 +88,7 @@ instance Default RasterificState where
 --   monad.
 type RenderM a = StateStackT RasterificState RenderR a
 
-type RenderR a = R.Drawing PixelRGBA8 a
+type RenderR = R.Drawing PixelRGBA8
 
 liftR :: RenderR a -> RenderM a
 liftR = lift
@@ -97,8 +106,8 @@ instance Backend Rasterific R2 where
           }
     deriving (Show)
 
-  doRender _ (RasterificOptions file size out _) (R r) =
-    R.renderDrawing (round w) (round h) PixelRGBA8 r'
+  doRender _ (RasterificOptions file size _) (R r) =
+    R.renderDrawing (round w) (round h) bgColor r'
     where
       r' = runRenderM r
       (w,h) = case size of
@@ -106,6 +115,7 @@ instance Backend Rasterific R2 where
                 Height h'  -> (h',h')
                 Dims w' h' -> (w',h')
                 Absolute   -> (100,100)
+      bgColor = PixelRGBA8 255 255 255 0
 
   renderData _ = renderRTree . toRTree
 
@@ -144,7 +154,7 @@ renderR = runR . render Rasterific
 rasterificStrokeStyle :: Style v -> (Float, R.Join, (R.Cap, R.Cap), R.DashPattern)
 rasterificStrokeStyle s = (strokeWidth, strokeJoin, strokeCaps, dashPattern)
   where
-    strokeWidth = fromMaybe 0.01 (getLineWidth <$> getAttr s)
+    strokeWidth = double2Float $ fromMaybe 0.01 (getLineWidth <$> getAttr s)
     strokeJoin = fromMaybe (R.JoinMiter 0) (fromLineJoin . getLineJoin <$> getAttr s)
     strokeCaps = (strokeCap, strokeCap)
     strokeCap = fromMaybe (R.CapStraight 0) (fromLineCap . getLineCap <$> getAttr s)
@@ -164,44 +174,48 @@ fromLineJoin LineJoinBevel = R.JoinMiter 1
 getStyleAttrib :: AttributeClass a => (a -> b) -> RenderM (Maybe b)
 getStyleAttrib f = (fmap f . getAttr) <$> use accumStyle
 
-setSourceColor :: Maybe (AlphaColour Double) -> RenderM ()
-setSourceColor Nothing  = return ()
-setSourceColor (Just c) = do
-  o <- fromMaybe 1 <$> getStyleAttrib getOpacity
-  liftR (R.withTexture $ uniformTexture drawColor)
+sourceColor :: Maybe (AlphaColour Double) -> Double -> PixelRGBA8
+sourceColor Nothing  _ = PixelRGBA8 0 0 0 0
+sourceColor (Just c) o = drawColor
   where
     drawColor = PixelRGBA8 r g b a
-    (r,g,b,a) = colorToSRGBA c
+    (r, g, b, a) = (int r', int g', int b', int (o * a'))
+    (r',g',b',a') = colorToSRGBA c
+    int x = round (255 * x)
+
+vec2 :: Double -> Double -> R.V2 Float
+vec2 x y = R.V2 x' y'
+  where
+    (x', y') = (double2Float x, double2Float y)
 
 renderSeg :: Segment Closed R2 -> R.PathCommand
-renderSeg  (Linear (OffsetClosed (unr2 -> (x,y)))) = R.PathLineTo (R.V2 x y)
+renderSeg  (Linear (OffsetClosed (unr2 -> (x,y)))) =
+  R.PathLineTo (vec2 x y)
 renderSeg  (Cubic (unr2 -> (x1,y1))
                   (unr2 -> (x2,y2))
                   (OffsetClosed (unr2 -> (x3,y3)))) =
-  R.PathCubicBezierCurveTo (R.V2 x1 y1) (R.V2 x2 y2) (R.V2 x3 y3)
+  R.PathCubicBezierCurveTo (vec2 x1 y1) (vec2 x2 y2) (vec2 x3 y3)
 
 renderTrail :: Located (Trail R2) -> [R.Primitive]
 renderTrail (viewLoc -> (unp2 -> (x,y), t)) =
-  R.pathToPrimitives $ withTrail (renderLine t) (renderLoop t)
+  R.pathToPrimitives $ withTrail renderLine renderLoop t
   where
-    renderLine l = R.Path (R.V2 x y) False (map renderSeg (lineSegments l))
-    renderLoop lp = case loopSegments lp of
-      (segs, Linear _) -> R.Path (R.V2 x y) False (map renderSeg segs)
-      _ -> R.Path (R.V2 x y) True (map renderSeg (lineSegments . cutLoop $ lp))
+    renderLine l = R.Path (vec2 x y) False (map renderSeg (lineSegments l))
+    renderLoop lp = R.Path (vec2 x y) True (map renderSeg (lineSegments . cutLoop $ lp))
 
 instance Renderable (Path R2) Rasterific where
   render _ p = R $ do
     f <- getStyleAttrib (toAlphaColour . getFillColor)
     s <- getStyleAttrib (toAlphaColour . getLineColor)
+    o <- fromMaybe 1 <$> getStyleAttrib getOpacity
     ign <- use ignoreFill
-    setSourceColor f
-    when (isJust f && not ign) $ liftR R.fill prims
-    setSourceColor s
     sty <- use accumStyle
-    let (l, j, c, _) = rasterificStrokeStyle sty
-    liftR R.stroke l j c prims
-    where
-      prims = map renderTrail (op Path p)
+    let fColor = uniformTexture $ sourceColor f o
+        sColor = uniformTexture $ sourceColor s o
+        (l, j, c, _) = rasterificStrokeStyle sty
+        prims = concatMap renderTrail (op Path p)
+    when (isJust f && not ign) $ liftR (R.withTexture fColor $ R.fill prims)
+    liftR (R.withTexture sColor $ R.stroke l j c prims)
 
 
 instance Renderable (Segment Closed R2) Rasterific where
@@ -210,6 +224,7 @@ instance Renderable (Segment Closed R2) Rasterific where
 instance Renderable (Trail R2) Rasterific where
   render c = render c . pathFromTrail
 
-renderRasterifc :: FilePath -> SizeSpec2D -> Diagram Rasterific R2 -> IO ()
-renderRasterifc outFile sizeSpec d =
-  renderDia Rasterific (RasterificOptions outFile sizeSpec  False) d
+renderRasterific :: FilePath -> SizeSpec2D -> Diagram Rasterific R2 -> IO ()
+renderRasterific outFile sizeSpec d = writePng outFile img
+  where
+    img = renderDia Rasterific (RasterificOptions outFile sizeSpec  False) d

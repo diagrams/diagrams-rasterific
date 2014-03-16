@@ -1,8 +1,10 @@
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE FlexibleInstances    #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE CPP                  #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE TemplateHaskell      #-}
+{-# LANGUAGE TypeFamilies         #-}
+
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Diagrams.Backend.Rasterific.CmdLine
@@ -12,3 +14,6 @@
 --
 -- Convenient creation of command-line-driven executables for
 -- rendering diagrams using the Rasterific backend.
+-----------------------------------------------------------------------------
+
+module Diagrams.Backend.Rasterific.CmdLine where
