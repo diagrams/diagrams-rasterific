@@ -29,8 +29,7 @@ module Diagrams.Backend.Rasterific
 import           Diagrams.Core.Compile           (RNode (..), RTree, toRTree)
 import           Diagrams.Core.Transform
 import           Diagrams.Prelude                hiding (opacity, view, Image)
-import           Diagrams.TwoD.Adjust            (adjustDia2D,
-                                                  setDefault2DAttributes)
+import           Diagrams.TwoD.Adjust            (setDefault2DAttributes, adjustDiaSize2D)
 import           Diagrams.TwoD.Path              (Clip (Clip), getFillRule)
 import           Diagrams.TwoD.Size              (requiredScaleT)
 
@@ -126,6 +125,15 @@ instance Backend Rasterific R2 where
                                           c opts (d # reflectY)
     where setRasterificSizeSpec sz o = o { _rasterificSizeSpec = sz }
 
+-- Don't do any freezing, will be removed after units branch is merged
+adjustDia2D :: Monoid' m
+            => (Options b R2 -> SizeSpec2D)
+            -> (SizeSpec2D -> Options b R2 -> Options b R2)
+            -> b -> Options b R2 -> QDiagram b R2 m
+            -> (Options b R2, QDiagram b R2 m)
+adjustDia2D getSize setSize b opts d
+  = adjustDiaSize2D getSize setSize b opts (d # setDefault2DAttributes)
+
 runR :: Render  Rasterific R2 -> RenderM ()
 runR (R r) = r
 
@@ -140,11 +148,11 @@ renderRTree (Node (RStyle sty) ts)   = R $ do
   accumStyle %= (<> sty)
   runR $ F.foldMap renderRTree ts
   restore
+-- Frozen nodes will be eliminated once units is merged so we don't
+-- bother with them. Instead we temporarily use a custom adjustDia2D with
+-- no freeze.
 renderRTree (Node (RFrozenTr tr) ts) = R $ do
-  save
-  --liftR $ rasterificTransf tr
   runR $ F.foldMap renderRTree ts
-  restore
 renderRTree (Node _ ts)              = F.foldMap renderRTree ts
 
 -- | Render an object that the Rasterific backend knows how to render.
@@ -183,30 +191,39 @@ sourceColor (Just c) o = drawColor
     (r',g',b',a') = colorToSRGBA c
     int x = round (255 * x)
 
-vec2 :: Double -> Double -> R.V2 Float
-vec2 x y = R.V2 x' y'
+v2 :: Double -> Double -> R.V2 Float
+v2 x y = R.V2 x' y'
   where
     (x', y') = (double2Float x, double2Float y)
 
+p2v2 :: P2 -> R.V2 Float
+p2v2 p = uncurry v2 $ unp2 p
+
+r2v2 :: R2 -> R.V2 Float
+r2v2 r = uncurry v2 $ unr2 r
+
 p2PathLineTo :: P2 -> R.PathCommand
 p2PathLineTo (unp2 -> (x, y)) =
-  R.PathLineTo (vec2 x y)
+  R.PathLineTo (v2 x y)
 
-renderSeg :: Segment Closed R2 -> R.PathCommand
-renderSeg  (Linear (OffsetClosed (unr2 -> (x,y)))) =
-  R.PathLineTo (vec2 x y)
-renderSeg  (Cubic (unr2 -> (x1,y1))
-                  (unr2 -> (x2,y2))
-                  (OffsetClosed (unr2 -> (x3,y3)))) =
-  R.PathCubicBezierCurveTo (vec2 x1 y1) (vec2 x2 y2) (vec2 x3 y3)
+renderSeg :: P2 -> Segment Closed R2 -> R.Primitive
+renderSeg p (Linear (OffsetClosed v)) = R.LinePrim $ R.Line p' (p' + r2v2 v)
+  where p' = p2v2 p
+renderSeg p (Cubic v1 v2 (OffsetClosed v3)) =
+  R.CubicBezierPrim $ R.CubicBezier p0 p1 p2 p3
+  where
+    p0 = p2v2 p
+    p1 = p0 + r2v2 v1
+    p2 = p0 + r2v2 v2
+    p3 = p0 + r2v2 v3
 
 renderTrail :: Located (Trail R2) -> [R.Primitive]
-renderTrail tr@(viewLoc -> (unp2 -> (x,y), t)) =
-    R.pathToPrimitives $ withTrail renderLine renderLoop t
+renderTrail tr =
+    map (uncurry renderSeg) ls
   where
-    renderLine l = R.Path (vec2 x y) False (map renderSeg (lineSegments l))
-    renderLoop lp = R.Path (vec2 x y) True
-      (map p2PathLineTo (trailVertices tr))
+    vs = trailVertices tr
+    segs = trailSegments . unLoc $ tr
+    ls = zip vs segs
 
 instance Renderable (Path R2) Rasterific where
   render _ p = R $ do
