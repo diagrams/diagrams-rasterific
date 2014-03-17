@@ -13,7 +13,7 @@
 -------------------------------------------------------------------------------
 -- |
 -- Module      :  Diagrams.Backend.Rasterific
--- Copyright   :  (c) 2014 diagrams-svg team (see LICENSE)
+-- Copyright   :  (c) 2014 diagrams-rasterific team (see LICENSE)
 -- License     :  BSD-style (see LICENSE)
 -- Maintainer  :  diagrams-discuss@googlegroups.com
 --
@@ -188,6 +188,10 @@ vec2 x y = R.V2 x' y'
   where
     (x', y') = (double2Float x, double2Float y)
 
+p2PathLineTo :: P2 -> R.PathCommand
+p2PathLineTo (unp2 -> (x, y)) =
+  R.PathLineTo (vec2 x y)
+
 renderSeg :: Segment Closed R2 -> R.PathCommand
 renderSeg  (Linear (OffsetClosed (unr2 -> (x,y)))) =
   R.PathLineTo (vec2 x y)
@@ -197,11 +201,12 @@ renderSeg  (Cubic (unr2 -> (x1,y1))
   R.PathCubicBezierCurveTo (vec2 x1 y1) (vec2 x2 y2) (vec2 x3 y3)
 
 renderTrail :: Located (Trail R2) -> [R.Primitive]
-renderTrail (viewLoc -> (unp2 -> (x,y), t)) =
-  R.pathToPrimitives $ withTrail renderLine renderLoop t
+renderTrail tr@(viewLoc -> (unp2 -> (x,y), t)) =
+    R.pathToPrimitives $ withTrail renderLine renderLoop t
   where
     renderLine l = R.Path (vec2 x y) False (map renderSeg (lineSegments l))
-    renderLoop lp = R.Path (vec2 x y) True (map renderSeg (lineSegments . cutLoop $ lp))
+    renderLoop lp = R.Path (vec2 x y) True
+      (map p2PathLineTo (trailVertices tr))
 
 instance Renderable (Path R2) Rasterific where
   render _ p = R $ do
@@ -227,4 +232,4 @@ instance Renderable (Trail R2) Rasterific where
 renderRasterific :: FilePath -> SizeSpec2D -> Diagram Rasterific R2 -> IO ()
 renderRasterific outFile sizeSpec d = writePng outFile img
   where
-    img = renderDia Rasterific (RasterificOptions outFile sizeSpec  False) d
+    img = renderDia Rasterific (RasterificOptions outFile sizeSpec False) d
