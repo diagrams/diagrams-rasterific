@@ -109,6 +109,10 @@ instance Backend Rasterific R2 where
     R.renderDrawing (round w) (round h) bgColor r'
     where
       r' = runRenderM r
+      -- Everything except Dims is arbitrary. The backend
+      -- should have first run 'adjustDia' to update the
+      -- final size of the diagram with explicit dimensions,
+      -- so normally we would only expect to get Dims anyway.
       (w,h) = case size of
                 Width w'   -> (w',w')
                 Height h'  -> (h',h')
@@ -125,7 +129,7 @@ instance Backend Rasterific R2 where
                                           c opts (d # reflectY)
     where setRasterificSizeSpec sz o = o { _rasterificSizeSpec = sz }
 
--- Don't do any freezing, will be removed after units branch is merged
+-- XXX Don't do any freezing, will be removed after units branch is merged
 adjustDia2D :: Monoid' m
             => (Options b R2 -> SizeSpec2D)
             -> (SizeSpec2D -> Options b R2 -> Options b R2)
@@ -150,23 +154,47 @@ renderRTree (Node (RStyle sty) ts)   = R $ do
   restore
 -- Frozen nodes will be eliminated once units is merged so we don't
 -- bother with them. Instead we temporarily use a custom adjustDia2D with
--- no freeze.
+-- no freeze. This means that line widths will be wrong.
 renderRTree (Node (RFrozenTr tr) ts) = R $ do
   runR $ F.foldMap renderRTree ts
 renderRTree (Node _ ts)              = F.foldMap renderRTree ts
+
+rasterificFileName :: Lens' (Options Rasterific R2) String
+rasterificFileName = lens (\(RasterificOptions {_rasterificFileName = f}) -> f)
+                     (\o f -> o {_rasterificFileName = f})
+
+rasterificSizeSpec :: Lens' (Options Rasterific R2) SizeSpec2D
+rasterificSizeSpec = lens (\(RasterificOptions {_rasterificSizeSpec = s}) -> s)
+                     (\o s -> o {_rasterificSizeSpec = s})
+
+--rasterificOutputType :: Lens' (Options Rasterific R2) OutputType
+--rasterificOutputType = lens (\(RasterificOptions {_rasterificOutputType = t}) -> t)
+--                     (\o t -> o {_rasterificOutputType = t})
+
+rasterificBypassAdjust :: Lens' (Options Rasterific R2) Bool
+rasterificBypassAdjust = lens (\(RasterificOptions {_rasterificBypassAdjust = b}) -> b)
+                     (\o b -> o {_rasterificBypassAdjust = b})
 
 -- | Render an object that the Rasterific backend knows how to render.
 renderR :: (Renderable a Rasterific, V a ~ R2) => a -> RenderM ()
 renderR = runR . render Rasterific
 
-rasterificStrokeStyle :: Style v -> (Float, R.Join, (R.Cap, R.Cap), R.DashPattern)
+rasterificStrokeStyle :: Style v
+                     -> (Float, R.Join, (R.Cap, R.Cap), Maybe R.DashPattern)
 rasterificStrokeStyle s = (strokeWidth, strokeJoin, strokeCaps, dashPattern)
   where
     strokeWidth = double2Float $ fromMaybe 0.01 (getLineWidth <$> getAttr s)
     strokeJoin = fromMaybe (R.JoinMiter 0) (fromLineJoin . getLineJoin <$> getAttr s)
     strokeCaps = (strokeCap, strokeCap)
     strokeCap = fromMaybe (R.CapStraight 0) (fromLineCap . getLineCap <$> getAttr s)
-    dashPattern = [5, 10, 5]
+    dashPattern = fromDashing . getDashing <$> getAttr s
+
+--rasterificClipPath :: Style v -> (forall px. (Maybe (R.Drawing px ())))
+--rasterificClipPath s =
+--  case op Clip <$> getAttr s of
+--    Nothing -> Nothing
+--    Just paths -> Just $ R.fill (concat . concat $ ((map . map) renderTrail
+--                       $ (map (op Path) paths)))
 
 fromLineCap :: LineCap -> R.Cap
 fromLineCap LineCapButt   = R.CapStraight 0
@@ -177,6 +205,10 @@ fromLineJoin :: LineJoin -> R.Join
 fromLineJoin LineJoinMiter = R.JoinMiter 0
 fromLineJoin LineJoinRound = R.JoinRound
 fromLineJoin LineJoinBevel = R.JoinMiter 1
+
+-- Rasterific does not currently support a dash offset.
+fromDashing :: Dashing -> R.DashPattern
+fromDashing (Dashing ds d) = map double2Float ds
 
 -- | Get an accumulated style attribute from the render monad state.
 getStyleAttrib :: AttributeClass a => (a -> b) -> RenderM (Maybe b)
@@ -201,10 +233,6 @@ p2v2 p = uncurry v2 $ unp2 p
 
 r2v2 :: R2 -> R.V2 Float
 r2v2 r = uncurry v2 $ unr2 r
-
-p2PathLineTo :: P2 -> R.PathCommand
-p2PathLineTo (unp2 -> (x, y)) =
-  R.PathLineTo (v2 x y)
 
 renderSeg :: P2 -> Segment Closed R2 -> R.Primitive
 renderSeg p (Linear (OffsetClosed v)) = R.LinePrim $ R.Line p' (p' + r2v2 v)
@@ -234,10 +262,19 @@ instance Renderable (Path R2) Rasterific where
     sty <- use accumStyle
     let fColor = uniformTexture $ sourceColor f o
         sColor = uniformTexture $ sourceColor s o
-        (l, j, c, _) = rasterificStrokeStyle sty
+        (l, j, c, d) = rasterificStrokeStyle sty
         prims = concatMap renderTrail (op Path p)
-    when (isJust f && not ign) $ liftR (R.withTexture fColor $ R.fill prims)
-    liftR (R.withTexture sColor $ R.stroke l j c prims)
+    case d of
+      Nothing -> liftR (R.withTexture sColor $ R.stroke l j c prims)
+      Just d  -> liftR (R.withTexture sColor $ R.dashedStroke d l j c prims)
+
+    case op Clip <$> getAttr sty of
+      Nothing -> when (isJust f && not ign) $ liftR (R.withTexture fColor $ R.fill prims)
+      Just paths -> when (isJust f && not ign) $
+                 liftR (R.withClipping
+                       (R.fill (concat . concat $ ((map . map) renderTrail
+                     $ (map (op Path) paths))))
+                       (R.withTexture fColor $ R.fill prims))
 
 
 instance Renderable (Segment Closed R2) Rasterific where
