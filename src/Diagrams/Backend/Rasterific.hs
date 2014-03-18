@@ -243,13 +243,6 @@ rasterificStrokeStyle s = (strokeWidth, strokeJoin, strokeCaps, dashPattern)
     strokeCap = fromMaybe (R.CapStraight 0) (fromLineCap . getLineCap <$> getAttr s)
     dashPattern = fromDashing . getDashing <$> getAttr s
 
---rasterificClipPath :: Style v -> (forall px. (Maybe (R.Drawing px ())))
---rasterificClipPath s =
---  case op Clip <$> getAttr s of
---    Nothing -> Nothing
---    Just paths -> Just $ R.fill (concat . concat $ ((map . map) renderTrail
---                       $ (map (op Path) paths)))
-
 fromLineCap :: LineCap -> R.Cap
 fromLineCap LineCapButt   = R.CapStraight 0
 fromLineCap LineCapRound  = R.CapRound
@@ -317,13 +310,14 @@ instance Renderable (Path R2) Rasterific where
     let fColor = uniformTexture $ sourceColor f o
         sColor = uniformTexture $ sourceColor s o
         (l, j, c, d) = rasterificStrokeStyle sty
-        prims = concatMap renderTrail (op Path p)
+        primList = map renderTrail (op Path p)
+        prims = concat primList
 
     -- If a dashing pattern is provided, use @dashedStroke@ otherwise @stroke@.
-    maybe (liftR (R.withTexture sColor $ R.stroke l j c prims))
-          (\dsh -> liftR (R.withTexture sColor $ R.dashedStroke dsh l j c prims))
+    maybe (liftR (R.withTexture sColor $ mapM_ (R.stroke l j c) primList))
+          (\dsh -> liftR (R.withTexture sColor $ mapM_ (R.dashedStroke dsh l j c) primList))
           d
-    -- If there is a clipping path must use @withClipping@.
+    -- If there is a clipping path we must use @withClipping@.
     maybe (when (isJust f) $ liftR (R.withTexture fColor $ R.fill prims))
           (\paths -> when (isJust f) $ liftR (R.withClipping
                           (R.fill (concat . concat $ ((map . map) renderTrail
