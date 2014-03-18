@@ -17,10 +17,63 @@
 -- License     :  BSD-style (see LICENSE)
 -- Maintainer  :  diagrams-discuss@googlegroups.com
 --
--------------------------------------------------------------------------------
+-- A full-featured rendering backend for diagrams using Rasterific,
+-- implemented natively in Haskell (making it easy to use on any
+-- platform).
+--
+-- To invoke the Rasterific backend, you have three options.
+--
+-- * You can use the "Diagrams.Backend.Rasterific.CmdLine" module to create
+--   standalone executables which output images when invoked.
+--
+-- * You can use the 'renderRasterific' function provided by this module,
+--   which gives you more flexible programmatic control over when and
+--   how images are output (making it easy to, for example, write a
+--   single program that outputs multiple images, or one that outputs
+--   images dynamically based on user input, and so on).
+--
+-- * For the most flexibility (/e.g./ if you want access to the
+--   resulting Rasterific value directly in memory without writing it to
+--   disk), you can manually invoke the 'renderDia' method from the
+--   'Diagrams.Core.Types.Backend' instance for @Rasterific@.  In particular,
+--   'Diagrams.Core.Types.renderDia' has the generic type
+--
+-- > renderDia :: b -> Options b v -> QDiagram b v m -> Result b v
+--
+-- (omitting a few type class constraints).  @b@ represents the
+-- backend type, @v@ the vector space, and @m@ the type of monoidal
+-- query annotations on the diagram.  'Options' and 'Result' are
+-- associated data and type families, respectively, which yield the
+-- type of option records and rendering results specific to any
+-- particular backend.  For @b ~ Rasterific@ and @v ~ R2@, we have
+--
+-- > data Options Rasterific R2 = RasterificOptions
+-- >          { _rasterificFileName      :: String     -- ^ The name of the file you want generated
+-- >          , _rasterificSizeSpec      :: SizeSpec2D -- ^ The requested size of the output
+-- >          , _rasterificBypassAdjust  :: Bool       -- ^ Should the 'adjustDia' step be bypassed during rendering?
+-- >          }
+--
+-- @
+-- data family Render Rasterific R2 = 'R (RenderM ())'
+-- @
+--
+-- @
+-- type family Result Rasterific R2 = 'Image PixelRGBA8'
+-- @
+--
+-- So the type of 'renderDia' resolves to
+--
+-- @
+-- renderDia :: Rasterific -> Options Rasterific R2 -> QDiagram Rasterific R2 m -> 'Image PixelRGBA8'
+-- @
+--
+-- which you could call like @renderDia Rasterific (RasterificOptions (Width 250))
+-- myDiagram@.
+--
+-----------------------------------------------------------------------------
 module Diagrams.Backend.Rasterific
-  ( Rasterific(..) -- rendering token
-  , B
+  ( Rasterific(..)
+  , B -- rendering token
   , Options(..)
 
   , renderRasterific
@@ -46,7 +99,7 @@ import           Control.Monad.StateStack
 
 import           Data.Default.Class
 import qualified Data.Foldable                   as F
-import           Data.Maybe                      (isJust, fromMaybe)
+import           Data.Maybe                      (isJust, fromMaybe, maybe)
 import           Data.Tree
 import           Data.Typeable
 import           GHC.Generics                    (Generic)
@@ -101,7 +154,7 @@ instance Backend Rasterific R2 where
   data Options Rasterific R2 = RasterificOptions
           { _rasterificFileName      :: String     -- ^ The name of the file you want generated
           , _rasterificSizeSpec      :: SizeSpec2D -- ^ The requested size of the output
-          , _rasterificBypassAdjust  :: Bool    -- ^ Should the 'adjustDia' step be bypassed during rendering?
+          , _rasterificBypassAdjust  :: Bool       -- ^ Should the 'adjustDia' step be bypassed during rendering?
           }
     deriving (Show)
 
@@ -264,18 +317,18 @@ instance Renderable (Path R2) Rasterific where
         sColor = uniformTexture $ sourceColor s o
         (l, j, c, d) = rasterificStrokeStyle sty
         prims = concatMap renderTrail (op Path p)
-    case d of
-      Nothing -> liftR (R.withTexture sColor $ R.stroke l j c prims)
-      Just d  -> liftR (R.withTexture sColor $ R.dashedStroke d l j c prims)
 
-    case op Clip <$> getAttr sty of
-      Nothing -> when (isJust f && not ign) $ liftR (R.withTexture fColor $ R.fill prims)
-      Just paths -> when (isJust f && not ign) $
-                 liftR (R.withClipping
-                       (R.fill (concat . concat $ ((map . map) renderTrail
-                     $ (map (op Path) paths))))
-                       (R.withTexture fColor $ R.fill prims))
-
+    -- If a dashing pattern is provided, use @dashedStroke@ otherwise @stroke@.
+    maybe (liftR (R.withTexture sColor $ R.stroke l j c prims))
+          (\dsh -> liftR (R.withTexture sColor $ R.dashedStroke dsh l j c prims))
+          d
+    -- If there is a clipping path must use @withClipping@.
+    maybe (when (isJust f && not ign) $ liftR (R.withTexture fColor $ R.fill prims))
+          (\paths -> when (isJust f && not ign) $ liftR (R.withClipping
+                          (R.fill (concat . concat $ ((map . map) renderTrail
+                        $ (map (op Path) paths))))
+                          (R.withTexture fColor $ R.fill prims)))
+          (op Clip <$> getAttr sty)
 
 instance Renderable (Segment Closed R2) Rasterific where
   render c = render c . (fromSegments :: [Segment Closed R2] -> Path R2) . (:[])
