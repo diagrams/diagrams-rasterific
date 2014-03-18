@@ -124,7 +124,6 @@ type B = Rasterific
 data RasterificState =
   RasterificState { _accumStyle :: Style R2
                     -- ^ The current accumulated style.
-                  , _ignoreFill :: Bool
                   }
 
 makeLenses ''RasterificState
@@ -132,7 +131,6 @@ makeLenses ''RasterificState
 instance Default RasterificState where
   def = RasterificState
         { _accumStyle       = mempty
-        , _ignoreFill       = False
         }
 
 -- | The custom monad in which intermediate drawing options take
@@ -173,7 +171,10 @@ instance Backend Rasterific R2 where
                 Absolute   -> (100,100)
       bgColor = PixelRGBA8 255 255 255 0
 
-  renderData _ = renderRTree . toRTree
+  renderData _ = renderRTree
+               . Node (RStyle (mempty # recommendFillColor (transparent :: AlphaColour Double)))
+               . (:[])
+               . splitFills. toRTree
 
   adjustDia c opts d = if _rasterificBypassAdjust opts
                          then (opts, d # setDefault2DAttributes)
@@ -298,6 +299,7 @@ renderSeg p (Cubic v1 v2 (OffsetClosed v3)) =
     p2 = p0 + r2v2 v2
     p3 = p0 + r2v2 v3
 
+-- XXX must be changed to differentiate lines and loops.
 renderTrail :: Located (Trail R2) -> [R.Primitive]
 renderTrail tr =
     map (uncurry renderSeg) ls
@@ -311,7 +313,6 @@ instance Renderable (Path R2) Rasterific where
     f <- getStyleAttrib (toAlphaColour . getFillColor)
     s <- getStyleAttrib (toAlphaColour . getLineColor)
     o <- fromMaybe 1 <$> getStyleAttrib getOpacity
-    ign <- use ignoreFill
     sty <- use accumStyle
     let fColor = uniformTexture $ sourceColor f o
         sColor = uniformTexture $ sourceColor s o
@@ -323,8 +324,8 @@ instance Renderable (Path R2) Rasterific where
           (\dsh -> liftR (R.withTexture sColor $ R.dashedStroke dsh l j c prims))
           d
     -- If there is a clipping path must use @withClipping@.
-    maybe (when (isJust f && not ign) $ liftR (R.withTexture fColor $ R.fill prims))
-          (\paths -> when (isJust f && not ign) $ liftR (R.withClipping
+    maybe (when (isJust f) $ liftR (R.withTexture fColor $ R.fill prims))
+          (\paths -> when (isJust f) $ liftR (R.withClipping
                           (R.fill (concat . concat $ ((map . map) renderTrail
                         $ (map (op Path) paths))))
                           (R.withTexture fColor $ R.fill prims)))
