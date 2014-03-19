@@ -74,13 +74,11 @@
 -- XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 --
 -- To do:
---  Add other output types
 --  Fix Opacity
---  Images
---  Text
---  Remove Debugging section
---  Fill Rules (waiting for rasterific)
---  Write CmdLine.hs
+--  Waiting for Rasterific:
+--    Images
+--    Text
+--    Fill Rules
 --
 -- XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 -------------------------------------------------------------------------------
@@ -128,13 +126,6 @@ data Rasterific = Rasterific
   deriving (Eq,Ord,Read,Show,Typeable)
 
 type B = Rasterific
-
--- | Output types supported by Rasterific, including four different file
---   types (PNG, TIFF, GIF ()).
---data OutputType =
---    PNG         -- ^ Portable Network Graphics output.
---  | TIFF          -- ^ Tiff output
---  deriving (Eq, Ord, Read, Show, Bounded, Enum, Typeable, Generic)
 
 data RasterificState =
   RasterificState { _accumStyle :: Style R2
@@ -288,15 +279,15 @@ sourceColor (Just c) o = drawColor
     (r',g',b',a') = colorToSRGBA c
     int x = round (255 * x)
 
-v2 :: Double -> Double -> R.V2 Float
+v2 :: Double -> Double -> R.Point
 v2 x y = R.V2 x' y'
   where
     (x', y') = (double2Float x, double2Float y)
 
-p2v2 :: P2 -> R.V2 Float
+p2v2 :: P2 -> R.Point
 p2v2 p = uncurry v2 $ unp2 p
 
-r2v2 :: R2 -> R.V2 Float
+r2v2 :: R2 -> R.Point
 r2v2 r = uncurry v2 $ unr2 r
 
 renderSeg :: P2 -> Segment Closed R2 -> R.Primitive

@@ -13,21 +13,59 @@
 --
 -- Convenient creation of command-line-driven executables for
 -- rendering diagrams using the Rasterific backend.
+--
+-- * 'defaultMain' creates an executable which can render a single
+--   diagram at various options.
+--
+-- * 'mainWith' is a generic form that does all of the above but with
+--   a slightly scarier type.  See "Diagrams.Backend.CmdLine".  This
+--   form can also take a function type that has a subtable final result
+--   (any of arguments to the above types) and 'Parseable' arguments.
+--
+-- If you want to generate diagrams programmatically---/i.e./ if you
+-- want to do anything more complex than what the below functions
+-- provide---you have several options.
+--
+-- * Use a function with 'mainWith'.  This may require making
+--   'Parseable' instances for custom argument types.
+--
+-- * Make a new 'Mainable' instance.  This may require a newtype
+--   wrapper on your diagram type to avoid the existing instances.
+--   This gives you more control over argument parsing, intervening
+--   steps, and diagram creation.
+--
+-- * Build option records and pass them along with a diagram to 'mainRender'
+--   from "Diagrams.Backend.CmdLine".
+--
+-- * You can use 'Diagrams.Backend.Rasterific.renderRasterific' to render a
+--   diagram to a file directly; see "Diagrams.Backend.Rasterific".
+--
+-- * A more flexible approach is to directly call 'renderDia'; see
+--   "Diagrams.Backend.Rasterific" for more information.
+--
+-- For a tutorial on command-line diagram creation see
+-- <http://projects.haskell.org/diagrams/doc/cmdline.html>.
+--
 -----------------------------------------------------------------------------
-
+-- XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+--
+-- To do:
+--  GIF animiation
+--  multiMain
+--  animMain
+--
+-- XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+-------------------------------------------------------------------------------
 module Diagrams.Backend.Rasterific.CmdLine
         (
          -- * General form of @main@
          -- $mainwith
-
          mainWith
 
          -- * Supported forms of @main@
-
        , defaultMain
 
          -- * Backend tokens
-
        , Rasterific
        , B
        ) where
