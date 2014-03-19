@@ -51,8 +51,6 @@
 --
 -- To do:
 --  GIF animiation
---  multiMain
---  animMain
 --
 -- XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 -------------------------------------------------------------------------------
@@ -64,6 +62,8 @@ module Diagrams.Backend.Rasterific.CmdLine
 
          -- * Supported forms of @main@
        , defaultMain
+       , multiMain
+       , animMain
 
          -- * Backend tokens
        , Rasterific
@@ -83,7 +83,7 @@ import            Data.List.Split
 #ifdef CMDLINELOOP
 import            Data.Maybe            (fromMaybe)
 import            Control.Monad         (when, mplus)
-
+import            Control.Lens          (_1)
 
 import            System.Environment    (getArgs, getProgName)
 import            System.Directory      (getModificationTime)
@@ -111,14 +111,21 @@ getModuleTime = getClockTime
 defaultMain :: Diagram Rasterific R2 -> IO ()
 defaultMain = mainWith
 
-instance Mainable (Diagram Rasterific R2) where
 #ifdef CMDLINELOOP
+output' :: Lens' (MainOpts (Diagram Rasterific R2)) FilePath
+output' = _1 . output
+
+instance Mainable (Diagram Rasterific R2) where
     type MainOpts (Diagram Rasterific R2) = (DiagramOpts, DiagramLoopOpts)
 
     mainRender (opts,loopOpts) d = do
         chooseRender opts d
         when (loopOpts^.loop) (waitForChange Nothing loopOpts)
 #else
+output' :: Lens' (MainOpts (Diagram Rasterific R2)) FilePath
+output' = output
+
+instance Mainable (Diagram Rasterific R2) where
     type MainOpts (Diagram Rasterific R2) = DiagramOpts
 
     mainRender opts d = chooseRender opts d
@@ -143,6 +150,58 @@ chooseRender opts d =
              "png" -> writePng (opts^.output) img
              "tif" -> writeTiff (opts^.output) img
        | otherwise -> putStrLn $ "Unknown file type: " ++ last ps
+
+-- | @multiMain@ is like 'defaultMain', except instead of a single
+--   diagram it takes a list of diagrams paired with names as input.
+--   The generated executable then takes a @--selection@ option
+--   specifying the name of the diagram that should be rendered.  The
+--   list of available diagrams may also be printed by passing the
+--   option @--list@.
+--
+--   Example usage:
+--
+-- @
+-- $ ghc --make MultiTest
+-- [1 of 1] Compiling Main             ( MultiTest.hs, MultiTest.o )
+-- Linking MultiTest ...
+-- $ ./MultiTest --list
+-- Available diagrams:
+--   foo bar
+-- $ ./MultiTest --selection bar -o Bar.png -w 200
+-- @
+
+multiMain :: [(String, Diagram Rasterific R2)] -> IO ()
+multiMain = mainWith
+
+instance Mainable [(String,Diagram Rasterific R2)] where
+    type MainOpts [(String,Diagram Rasterific R2)]
+        = (MainOpts (Diagram Rasterific R2), DiagramMultiOpts)
+
+    mainRender = defaultMultiMainRender
+
+-- | @animMain@ is like 'defaultMain', but renders an animation
+-- instead of a diagram.  It takes as input an animation and produces
+-- a command-line program which will crudely \"render\" the animation
+-- by rendering one image for each frame, named by extending the given
+-- output file name by consecutive integers.  For example if the given
+-- output file name is @foo\/blah.png@, the frames will be saved in
+-- @foo\/blah001.png@, @foo\/blah002.png@, and so on (the number of
+-- padding digits used depends on the total number of frames).  It is
+-- up to the user to take these images and stitch them together into
+-- an actual animation format (using, /e.g./ @ffmpeg@).
+--
+--   Of course, this is a rather crude method of rendering animations;
+--   more sophisticated methods will likely be added in the future.
+--
+-- The @--fpu@ option can be used to control how many frames will be
+-- output for each second (unit time) of animation.
+animMain :: Animation Rasterific R2 -> IO ()
+animMain = mainWith
+
+instance Mainable (Animation Rasterific R2) where
+    type MainOpts (Animation Rasterific R2) = (MainOpts (Diagram Rasterific R2), DiagramAnimOpts)
+
+    mainRender = defaultAnimMainRender output'
 
 #ifdef CMDLINELOOP
 waitForChange :: Maybe ModuleTime -> DiagramLoopOpts -> IO ()

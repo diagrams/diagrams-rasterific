@@ -118,6 +118,12 @@ import           GHC.Generics                    (Generic)
 
 import           System.FilePath                 (takeExtension)
 
+------- Debugging --------------------------------------------------------------
+import Debug.Trace
+
+traceShow' :: Show a => a -> a
+traceShow' x = traceShow x x
+--------------------------------------------------------------------------------
 -- | This data declaration is simply used as a token to distinguish
 --   the Rasterific backend: (1) when calling functions where the type
 --   inference engine would otherwise have no way to know which
@@ -273,11 +279,10 @@ getStyleAttrib f = (fmap f . getAttr) <$> use accumStyle
 -- XXX Opacity does not seem to be working right. Colors are too translucent.
 sourceColor :: Maybe (AlphaColour Double) -> Double -> PixelRGBA8
 sourceColor Nothing  _ = PixelRGBA8 0 0 0 0
-sourceColor (Just c) o = drawColor
+sourceColor (Just c) o = PixelRGBA8 r g b a
   where
-    drawColor = PixelRGBA8 r g b a
     (r, g, b, a) = (int r', int g', int b', int (o * a'))
-    (r',g',b',a') = colorToSRGBA c
+    (r',g',b', a') = colorToSRGBA c
     int x = round (255 * x)
 
 v2 :: Double -> Double -> R.Point
