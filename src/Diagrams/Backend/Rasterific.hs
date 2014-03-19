@@ -79,6 +79,7 @@
 --    Images
 --    Text
 --    Fill Rules
+--    Dash offset
 --
 -- XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 -------------------------------------------------------------------------------
