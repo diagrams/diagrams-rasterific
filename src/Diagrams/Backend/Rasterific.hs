@@ -70,7 +70,20 @@
 -- which you could call like @renderDia Rasterific (RasterificOptions (Width 250))
 -- myDiagram@.
 --
------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+-- XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+--
+-- To do:
+--  Add other output types
+--  Fix Opacity
+--  Images
+--  Text
+--  Remove Debugging section
+--  Fill Rules (waiting for rasterific)
+--  Write CmdLine.hs
+--
+-- XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+-------------------------------------------------------------------------------
 module Diagrams.Backend.Rasterific
   ( Rasterific(..)
   , B -- rendering token
@@ -89,7 +102,7 @@ import           Diagrams.TwoD.Size              (requiredScaleT)
 import qualified Graphics.Rasterific             as R
 import           Graphics.Rasterific.Texture     (uniformTexture)
 import           Codec.Picture                   (PixelRGBA8 (..), Image (..)
-                                                 ,writePng)
+                                                 ,writePng, writeTiff)
 import           GHC.Float                       (double2Float)
 
 import           Control.Lens                    hiding (transform, ( # ))
@@ -104,12 +117,7 @@ import           Data.Tree
 import           Data.Typeable
 import           GHC.Generics                    (Generic)
 
------- Debugging --------------------------------------------------------------
-import Debug.Trace
-
-traceShow' :: Show a => a -> a
-traceShow' x = traceShow x x
--------------------------------------------------------------------------------
+import           System.FilePath                 (takeExtension)
 
 -- | This data declaration is simply used as a token to distinguish
 --   the Rasterific backend: (1) when calling functions where the type
@@ -120,6 +128,13 @@ data Rasterific = Rasterific
   deriving (Eq,Ord,Read,Show,Typeable)
 
 type B = Rasterific
+
+-- | Output types supported by Rasterific, including four different file
+--   types (PNG, TIFF, GIF ()).
+--data OutputType =
+--    PNG         -- ^ Portable Network Graphics output.
+--  | TIFF          -- ^ Tiff output
+--  deriving (Eq, Ord, Read, Show, Bounded, Enum, Typeable, Generic)
 
 data RasterificState =
   RasterificState { _accumStyle :: Style R2
@@ -206,6 +221,7 @@ renderRTree (Node (RStyle sty) ts)   = R $ do
   accumStyle %= (<> sty)
   runR $ F.foldMap renderRTree ts
   restore
+-- XXX
 -- Frozen nodes will be eliminated once units is merged so we don't
 -- bother with them. Instead we temporarily use a custom adjustDia2D with
 -- no freeze. This means that line widths will be wrong.
@@ -221,6 +237,7 @@ rasterificSizeSpec :: Lens' (Options Rasterific R2) SizeSpec2D
 rasterificSizeSpec = lens (\(RasterificOptions {_rasterificSizeSpec = s}) -> s)
                      (\o s -> o {_rasterificSizeSpec = s})
 
+-- XXX To be added soon.
 --rasterificOutputType :: Lens' (Options Rasterific R2) OutputType
 --rasterificOutputType = lens (\(RasterificOptions {_rasterificOutputType = t}) -> t)
 --                     (\o t -> o {_rasterificOutputType = t})
@@ -261,6 +278,7 @@ fromDashing (Dashing ds d) = map double2Float ds
 getStyleAttrib :: AttributeClass a => (a -> b) -> RenderM (Maybe b)
 getStyleAttrib f = (fmap f . getAttr) <$> use accumStyle
 
+-- XXX Opacity does not seem to be working right. Colors are too translucent.
 sourceColor :: Maybe (AlphaColour Double) -> Double -> PixelRGBA8
 sourceColor Nothing  _ = PixelRGBA8 0 0 0 0
 sourceColor (Just c) o = drawColor
@@ -292,7 +310,6 @@ renderSeg p (Cubic v1 v2 (OffsetClosed v3)) =
     p2 = p0 + r2v2 v2
     p3 = p0 + r2v2 v3
 
--- XXX must be changed to differentiate lines and loops.
 renderTrail :: Located (Trail R2) -> [R.Primitive]
 renderTrail tr =
     map (uncurry renderSeg) ls
@@ -307,10 +324,15 @@ instance Renderable (Path R2) Rasterific where
     s <- getStyleAttrib (toAlphaColour . getLineColor)
     o <- fromMaybe 1 <$> getStyleAttrib getOpacity
     sty <- use accumStyle
+
     let fColor = uniformTexture $ sourceColor f o
         sColor = uniformTexture $ sourceColor s o
         (l, j, c, d) = rasterificStrokeStyle sty
+
+        -- For stroking we need to keep all of the contours separate.
         primList = map renderTrail (op Path p)
+
+        -- For filling we need to put them togehter.
         prims = concat primList
 
     -- If a dashing pattern is provided, use @dashedStroke@ otherwise @stroke@.
@@ -332,6 +354,10 @@ instance Renderable (Trail R2) Rasterific where
   render c = render c . pathFromTrail
 
 renderRasterific :: FilePath -> SizeSpec2D -> Diagram Rasterific R2 -> IO ()
-renderRasterific outFile sizeSpec d = writePng outFile img
+renderRasterific outFile sizeSpec d = writer outFile img
   where
+    writer = case takeExtension outFile of
+              ".png" -> writePng
+              ".tif" -> writeTiff
+              _      -> writePng
     img = renderDia Rasterific (RasterificOptions outFile sizeSpec False) d
