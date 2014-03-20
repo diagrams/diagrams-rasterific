@@ -70,13 +70,20 @@ module Diagrams.Backend.Rasterific.CmdLine
        , B
        ) where
 
-import            Diagrams.Prelude      hiding (width, height, interval)
+import            Diagrams.Prelude      hiding (width, height, interval, (<>)
+                                               ,Image, option)
 import            Diagrams.Backend.Rasterific
 import            Diagrams.Backend.CmdLine
 
-import            Codec.Picture         (writePng, writeTiff)
+import            Codec.Picture
+import            Codec.Picture.Types      (dropTransparency)
+import            Codec.Picture.ColorQuant (defaultPaletteOptions)
 
+import qualified  Data.ByteString.Lazy as L (ByteString, writeFile)
+
+import            Options.Applicative
 import            Control.Lens          ((^.), Lens', makeLenses)
+import            Control.Applicative   ((<$>))
 
 import            Data.List.Split
 
@@ -251,3 +258,80 @@ recompile lastAttempt prog mSrc = do
  where getModTime f = catch (Just <$> getModificationTime f)
                             (\(SomeException _) -> return Nothing)
 #endif
+
+gifMain :: [(Diagram Rasterific R2, GifDelay)] -> IO ()
+gifMain = mainWith
+
+-- | Extra options for animated GIFs.
+data GifOpts = GifOpts { _dither :: Bool
+                       , _noLooping :: Bool
+                       , _loopRepeat :: Maybe Int}
+
+makeLenses ''GifOpts
+
+-- | Command line parser for 'GifOpts'.
+--   @--dither@ turn dithering on.
+--   @--looping-off@ turn looping off, i.e play GIF once.
+--   @--loop-repeat@ number of times to repeat the GIF after the first playing.
+--   this option is only used if @--looping-off@ is not set.
+instance Parseable GifOpts where
+  parser = GifOpts <$> switch
+                       ( long "dither"
+                      <> help "Turn on dithering." )
+                   <*> switch
+                       ( long "looping-off"
+                      <> help "Turn looping off" )
+                   <*> ( optional . option )
+                       ( long "loop-repeat"
+                      <> help "Number of times to repeat" )
+
+instance Mainable [(Diagram Rasterific R2, GifDelay)] where
+    type MainOpts [(Diagram Rasterific R2, GifDelay)] = (DiagramOpts, GifOpts)
+
+    mainRender (dOpts, gOpts) ds = gifRender (dOpts, gOpts) ds
+
+encodeGifAnimation' :: [GifDelay] -> GifLooping -> Bool
+                   -> [Image PixelRGB8] -> Either String (L.ByteString)
+encodeGifAnimation' delays looping dithering lst =
+    encodeGifImages looping triples
+      where
+        triples = zipWith (\(x,z) y -> (x, y, z)) doubles delays
+        doubles = [(pal, img)
+                | (img, pal) <- palettize
+                   defaultPaletteOptions {enableImageDithering=dithering} <$> lst]
+
+writeGifAnimation' :: FilePath -> [GifDelay] -> GifLooping -> Bool
+                  -> [Image PixelRGB8] -> Either String (IO ())
+writeGifAnimation' path delays looping dithering img =
+    L.writeFile path <$> encodeGifAnimation' delays looping dithering img
+
+scaleInt :: Int -> Double -> Double -> Int
+scaleInt i num denom
+  | num == 0 || denom == 0 = i
+  | otherwise = round (num / denom * fromIntegral i)
+
+gifRender :: (DiagramOpts, GifOpts) -> [(Diagram Rasterific R2, GifDelay)] -> IO ()
+gifRender (dOpts, gOpts) lst =
+  case splitOn "." (dOpts^.output) of
+    [""] -> putStrLn "No output file given"
+    ps | last ps == "gif" -> do
+           let looping = if gOpts^.noLooping
+                         then LoopingNever
+                         else case gOpts^.loopRepeat of
+                                Nothing -> LoopingForever
+                                Just n  -> LoopingRepeat (fromIntegral n)
+               dias = map fst lst
+               delays = map snd lst
+               size = mkSizeSpec (fromIntegral <$> dOpts^.width) (fromIntegral <$> dOpts^.height)
+               opts = RasterificOptions (dOpts^.output) size False
+               imageRGB8s = map (pixelMap dropTransparency . renderDia Rasterific opts) dias
+               result = writeGifAnimation'
+                           (dOpts^.output)
+                            delays
+                            looping
+                           (gOpts^.dither)
+                            imageRGB8s
+           case result of
+             Left s   -> putStrLn s
+             Right io -> io
+       | otherwise -> putStrLn $ "File name must end with .gif"

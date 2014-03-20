@@ -235,11 +235,6 @@ rasterificSizeSpec :: Lens' (Options Rasterific R2) SizeSpec2D
 rasterificSizeSpec = lens (\(RasterificOptions {_rasterificSizeSpec = s}) -> s)
                      (\o s -> o {_rasterificSizeSpec = s})
 
--- XXX To be added soon.
---rasterificOutputType :: Lens' (Options Rasterific R2) OutputType
---rasterificOutputType = lens (\(RasterificOptions {_rasterificOutputType = t}) -> t)
---                     (\o t -> o {_rasterificOutputType = t})
-
 rasterificBypassAdjust :: Lens' (Options Rasterific R2) Bool
 rasterificBypassAdjust = lens (\(RasterificOptions {_rasterificBypassAdjust = b}) -> b)
                      (\o b -> o {_rasterificBypassAdjust = b})
