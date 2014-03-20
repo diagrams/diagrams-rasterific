@@ -9,7 +9,6 @@ The Rasterific backend is a work in progress, in particular
 - No support for text.
 - No support for images.
 - No fill rules.
-- No multiMain, animMain or GIF animation
 - No Dash offset
 
 [diagrams]: http://projects.haskell.org/diagrams/

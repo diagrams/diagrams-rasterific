@@ -285,10 +285,12 @@ p2v2 p = uncurry v2 $ unp2 p
 r2v2 :: R2 -> R.Point
 r2v2 r = uncurry v2 $ unr2 r
 
-renderSeg :: P2 -> Segment Closed R2 -> R.Primitive
-renderSeg p (Linear (OffsetClosed v)) = R.LinePrim $ R.Line p' (p' + r2v2 v)
-  where p' = p2v2 p
-renderSeg p (Cubic v1 v2 (OffsetClosed v3)) =
+renderSeg :: Located (Segment Closed R2) -> R.Primitive
+renderSeg (viewLoc -> (p, (Linear (OffsetClosed v)))) =
+  R.LinePrim $ R.Line p' (p' + r2v2 v)
+  where
+    p' = p2v2 p
+renderSeg (viewLoc -> (p, (Cubic v1 v2 (OffsetClosed v3)))) =
   R.CubicBezierPrim $ R.CubicBezier p0 p1 p2 p3
   where
     p0 = p2v2 p
@@ -297,12 +299,7 @@ renderSeg p (Cubic v1 v2 (OffsetClosed v3)) =
     p3 = p0 + r2v2 v3
 
 renderTrail :: Located (Trail R2) -> [R.Primitive]
-renderTrail tr =
-    map (uncurry renderSeg) ls
-  where
-    vs = trailVertices tr
-    segs = trailSegments . unLoc $ tr
-    ls = zip vs segs
+renderTrail tr = map renderSeg (trailLocSegments tr)
 
 instance Renderable (Path R2) Rasterific where
   render _ p = R $ do
