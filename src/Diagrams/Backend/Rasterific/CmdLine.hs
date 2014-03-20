@@ -17,9 +17,17 @@
 -- * 'defaultMain' creates an executable which can render a single
 --   diagram at various options.
 --
+-- * 'multiMain' is like 'defaultMain' but allows for a list of
+--   diagrams from which the user can choose one to render.
+--
+-- * 'animMain' is like 'defaultMain' but for animations instead of
+--   diagrams.
+--
+-- * `gifMain` creates an executable to generate an animated GIF.
+--
 -- * 'mainWith' is a generic form that does all of the above but with
 --   a slightly scarier type.  See "Diagrams.Backend.CmdLine".  This
---   form can also take a function type that has a subtable final result
+--   form can also take a function type that has a suitable final result
 --   (any of arguments to the above types) and 'Parseable' arguments.
 --
 -- If you want to generate diagrams programmatically---/i.e./ if you

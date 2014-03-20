@@ -293,13 +293,13 @@ renderSeg (viewLoc -> (p, (Linear (OffsetClosed v)))) =
 renderSeg (viewLoc -> (p, (Cubic v1 v2 (OffsetClosed v3)))) =
   R.CubicBezierPrim $ R.CubicBezier p0 p1 p2 p3
   where
-    p0 = p2v2 p
-    p1 = p0 + r2v2 v1
-    p2 = p0 + r2v2 v2
-    p3 = p0 + r2v2 v3
+    (p0, p1, p2, p3) = (p2v2 p, p0 + r2v2 v1, p0 + r2v2 v2, p0 + r2v2 v3)
 
 renderTrail :: Located (Trail R2) -> [R.Primitive]
 renderTrail tr = map renderSeg (trailLocSegments tr)
+
+renderPath :: Path R2 -> [[R.Primitive]]
+renderPath p = (map . map) renderSeg (pathLocSegments p)
 
 instance Renderable (Path R2) Rasterific where
   render _ p = R $ do
@@ -313,7 +313,7 @@ instance Renderable (Path R2) Rasterific where
         (l, j, c, d) = rasterificStrokeStyle sty
 
         -- For stroking we need to keep all of the contours separate.
-        primList = map renderTrail (op Path p)
+        primList = renderPath p
 
         -- For filling we need to put them togehter.
         prims = concat primList
