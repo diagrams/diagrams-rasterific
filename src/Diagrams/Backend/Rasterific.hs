@@ -19,7 +19,7 @@
 --
 -- A full-featured rendering backend for diagrams using Rasterific,
 -- implemented natively in Haskell (making it easy to use on any
--- platform).
+-- platform). Can create png, tif, bmp and animated GIFs.
 --
 -- To invoke the Rasterific backend, you have three options.
 --
@@ -92,30 +92,31 @@ module Diagrams.Backend.Rasterific
   , rasterificBypassAdjust
   ) where
 
-import           Diagrams.Core.Compile           (RNode (..), RTree, toRTree)
+import           Diagrams.Core.Compile       (RNode (..), RTree, toRTree)
 import           Diagrams.Core.Transform
-import           Diagrams.Prelude                hiding (opacity, view, Image)
-import           Diagrams.TwoD.Adjust            (setDefault2DAttributes, adjustDiaSize2D)
-import           Diagrams.TwoD.Path              (Clip (Clip))
+import           Diagrams.Prelude            hiding (Image, opacity, view)
+import           Diagrams.TwoD.Adjust        (adjustDiaSize2D,
+                                              setDefault2DAttributes)
+import           Diagrams.TwoD.Path          (Clip (Clip))
 
-import qualified Graphics.Rasterific             as R
-import           Graphics.Rasterific.Texture     (uniformTexture)
-import           Codec.Picture                   (PixelRGBA8 (..), Image (..)
-                                                 ,writePng, writeTiff)
-import           GHC.Float                       (double2Float)
+import           Codec.Picture               (Image (..), PixelRGBA8 (..),
+                                              writePng, writeTiff, writeBitmap)
+import           GHC.Float                   (double2Float)
+import qualified Graphics.Rasterific         as R
+import           Graphics.Rasterific.Texture (uniformTexture)
 
-import           Control.Lens                    hiding (transform, ( # ))
-import           Control.Monad                   (when)
-import           Control.Monad.Trans             (lift)
+import           Control.Lens                hiding (transform, ( # ))
+import           Control.Monad               (when)
 import           Control.Monad.StateStack
+import           Control.Monad.Trans         (lift)
 
 import           Data.Default.Class
-import qualified Data.Foldable                   as F
-import           Data.Maybe                      (isJust, fromMaybe)
+import qualified Data.Foldable               as F
+import           Data.Maybe                  (fromMaybe, isJust)
 import           Data.Tree
 import           Data.Typeable
 
-import           System.FilePath                 (takeExtension)
+import           System.FilePath             (takeExtension)
 
 ------- Debugging --------------------------------------------------------------
 --import Debug.Trace
@@ -336,5 +337,6 @@ renderRasterific outFile sizeSpec d = writer outFile img
     writer = case takeExtension outFile of
               ".png" -> writePng
               ".tif" -> writeTiff
+              ".bmp" -> writeBitmap
               _      -> writePng
     img = renderDia Rasterific (RasterificOptions sizeSpec False) d

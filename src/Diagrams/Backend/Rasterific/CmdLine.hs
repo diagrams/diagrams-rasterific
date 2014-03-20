@@ -12,7 +12,8 @@
 -- Maintainer  :  diagrams-discuss@googlegroups.com
 --
 -- Convenient creation of command-line-driven executables for
--- rendering diagrams using the Rasterific backend.
+-- rendering diagrams using the Rasterific backend. Create
+-- png, tif, bmp or animated GIF files.
 --
 -- * 'defaultMain' creates an executable which can render a single
 --   diagram at various options.
@@ -75,47 +76,54 @@ module Diagrams.Backend.Rasterific.CmdLine
        , B
        ) where
 
-import            Diagrams.Prelude      hiding (width, height, interval, (<>)
-                                               ,Image, option)
-import            Diagrams.Backend.Rasterific
-import            Diagrams.Backend.CmdLine
+import           Diagrams.Prelude   hiding (width, height, interval, (<>)
+                                           ,Image, option)
+import           Diagrams.Backend.Rasterific
+import           Diagrams.Backend.CmdLine
 
-import            Codec.Picture
-import            Codec.Picture.Types      (dropTransparency)
-import            Codec.Picture.ColorQuant (defaultPaletteOptions)
+import           Codec.Picture
+import           Codec.Picture.Types       (dropTransparency)
+import           Codec.Picture.ColorQuant  (defaultPaletteOptions)
 
-import qualified  Data.ByteString.Lazy as L (ByteString, writeFile)
+import qualified Data.ByteString.Lazy as L (ByteString, writeFile)
 
-import            Options.Applicative
-import            Control.Lens          ((^.), Lens', makeLenses)
+import           Options.Applicative
+import           Control.Lens              ((^.), Lens', makeLenses)
 
-import            Data.List.Split
+import           Data.List.Split
 
 #ifdef CMDLINELOOP
-import            Data.Maybe            (fromMaybe)
-import            Control.Monad         (when, mplus)
-import            Control.Lens          (_1)
+import           Data.Maybe               (fromMaybe)
+import           Control.Monad            (when, mplus)
+import           Control.Lens             (_1)
 
-import            System.Environment    (getArgs, getProgName)
-import            System.Directory      (getModificationTime)
-import            System.Process        (runProcess, waitForProcess)
-import            System.IO             (openFile, hClose, IOMode(..) ,hSetBuffering
-                                        ,BufferMode(..), stdout)
-import            System.Exit           (ExitCode(..))
-import            Control.Concurrent    (threadDelay)
-import            Control.Exception     (catch, SomeException(..), bracket)
-import            System.Posix.Process  (executeFile)
+import           System.Environment       (getArgs, getProgName)
+import           System.Directory         (getModificationTime)
+import           System.Process           (runProcess, waitForProcess)
+import           System.IO                (openFile, hClose, IOMode(..)
+                                          ,hSetBuffering, BufferMode(..)
+                                          ,stdout)
+import           System.Exit              (ExitCode(..))
+import           Control.Concurrent       (threadDelay)
+import           Control.Exception        (catch, SomeException(..), bracket)
+import           System.Posix.Process     (executeFile)
 
 #if MIN_VERSION_directory(1,2,0)
-import Data.Time.Clock (UTCTime,getCurrentTime)
+
+import           Data.Time.Clock          (UTCTime,getCurrentTime)
+
 type ModuleTime = UTCTime
 getModuleTime :: IO  ModuleTime
 getModuleTime = getCurrentTime
+
 #else
-import System.Time         (ClockTime, getClockTime)
+
+import          System.Time               (ClockTime, getClockTime)
+
 type ModuleTime = ClockTime
 getModuleTime :: IO  ModuleTime
 getModuleTime = getClockTime
+
 #endif
 #endif
 
@@ -123,6 +131,7 @@ defaultMain :: Diagram Rasterific R2 -> IO ()
 defaultMain = mainWith
 
 #ifdef CMDLINELOOP
+
 output' :: Lens' (MainOpts (Diagram Rasterific R2)) FilePath
 output' = _1 . output
 
@@ -133,6 +142,7 @@ instance Mainable (Diagram Rasterific R2) where
         chooseRender opts d
         when (loopOpts^.loop) (waitForChange Nothing loopOpts)
 #else
+
 output' :: Lens' (MainOpts (Diagram Rasterific R2)) FilePath
 output' = output
 
@@ -140,13 +150,14 @@ instance Mainable (Diagram Rasterific R2) where
     type MainOpts (Diagram Rasterific R2) = DiagramOpts
 
     mainRender opts d = chooseRender opts d
+
 #endif
 
 chooseRender :: DiagramOpts -> Diagram Rasterific R2 -> IO ()
 chooseRender opts d =
   case splitOn "." (opts ^. output) of
     [""] -> putStrLn "No output file given."
-    ps | last ps `elem` ["png", "tif"] -> do
+    ps | last ps `elem` ["png", "tif", "bmp"] -> do
            let img = renderDia Rasterific
                         ( RasterificOptions
                           (mkSizeSpec
@@ -159,6 +170,7 @@ chooseRender opts d =
            case last ps of
              "png" -> writePng (opts^.output) img
              "tif" -> writeTiff (opts^.output) img
+             "bmp" -> writeBitmap (opts^.output) img
              _     -> writePng (opts^.output) img
        | otherwise -> putStrLn $ "Unknown file type: " ++ last ps
 
@@ -210,11 +222,13 @@ animMain :: Animation Rasterific R2 -> IO ()
 animMain = mainWith
 
 instance Mainable (Animation Rasterific R2) where
-    type MainOpts (Animation Rasterific R2) = (MainOpts (Diagram Rasterific R2), DiagramAnimOpts)
+    type MainOpts (Animation Rasterific R2) =
+      (MainOpts (Diagram Rasterific R2), DiagramAnimOpts)
 
     mainRender = defaultAnimMainRender output'
 
 #ifdef CMDLINELOOP
+
 waitForChange :: Maybe ModuleTime -> DiagramLoopOpts -> IO ()
 waitForChange lastAttempt opts = do
     prog <- getProgName
