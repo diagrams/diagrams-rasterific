@@ -70,7 +70,6 @@ module Diagrams.Backend.Rasterific.CmdLine
         -- * GIF support
        , GifOpts(..)
 
-
          -- * Backend tokens
        , Rasterific
        , B
@@ -89,7 +88,6 @@ import qualified  Data.ByteString.Lazy as L (ByteString, writeFile)
 
 import            Options.Applicative
 import            Control.Lens          ((^.), Lens', makeLenses)
-import            Control.Applicative   ((<$>))
 
 import            Data.List.Split
 
@@ -161,6 +159,7 @@ chooseRender opts d =
            case last ps of
              "png" -> writePng (opts^.output) img
              "tif" -> writeTiff (opts^.output) img
+             _     -> writePng (opts^.output) img
        | otherwise -> putStrLn $ "Unknown file type: " ++ last ps
 
 -- | @multiMain@ is like 'defaultMain', except instead of a single
@@ -310,11 +309,6 @@ writeGifAnimation' :: FilePath -> [GifDelay] -> GifLooping -> Bool
 writeGifAnimation' path delays looping dithering img =
     L.writeFile path <$> encodeGifAnimation' delays looping dithering img
 
-scaleInt :: Int -> Double -> Double -> Int
-scaleInt i num denom
-  | num == 0 || denom == 0 = i
-  | otherwise = round (num / denom * fromIntegral i)
-
 gifRender :: (DiagramOpts, GifOpts) -> [(Diagram Rasterific R2, GifDelay)] -> IO ()
 gifRender (dOpts, gOpts) lst =
   case splitOn "." (dOpts^.output) of
@@ -327,15 +321,14 @@ gifRender (dOpts, gOpts) lst =
                                 Just n  -> LoopingRepeat (fromIntegral n)
                dias = map fst lst
                delays = map snd lst
-               size = mkSizeSpec (fromIntegral <$> dOpts^.width) (fromIntegral <$> dOpts^.height)
+               size = mkSizeSpec (fromIntegral <$> dOpts^.width)
+                                 (fromIntegral <$> dOpts^.height)
                opts = RasterificOptions size False
-               imageRGB8s = map (pixelMap dropTransparency . renderDia Rasterific opts) dias
-               result = writeGifAnimation'
-                           (dOpts^.output)
-                            delays
-                            looping
-                           (gOpts^.dither)
-                            imageRGB8s
+               imageRGB8s = map (pixelMap dropTransparency
+                               . renderDia Rasterific opts) dias
+               result = writeGifAnimation' (dOpts^.output) delays
+                                            looping (gOpts^.dither)
+                                            imageRGB8s
            case result of
              Left s   -> putStrLn s
              Right io -> io

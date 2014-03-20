@@ -88,14 +88,15 @@ module Diagrams.Backend.Rasterific
   , Options(..)
 
   , renderRasterific
+  , rasterificSizeSpec
+  , rasterificBypassAdjust
   ) where
 
 import           Diagrams.Core.Compile           (RNode (..), RTree, toRTree)
 import           Diagrams.Core.Transform
 import           Diagrams.Prelude                hiding (opacity, view, Image)
 import           Diagrams.TwoD.Adjust            (setDefault2DAttributes, adjustDiaSize2D)
-import           Diagrams.TwoD.Path              (Clip (Clip), getFillRule)
-import           Diagrams.TwoD.Size              (requiredScaleT)
+import           Diagrams.TwoD.Path              (Clip (Clip))
 
 import qualified Graphics.Rasterific             as R
 import           Graphics.Rasterific.Texture     (uniformTexture)
@@ -110,18 +111,17 @@ import           Control.Monad.StateStack
 
 import           Data.Default.Class
 import qualified Data.Foldable                   as F
-import           Data.Maybe                      (isJust, fromMaybe, maybe)
+import           Data.Maybe                      (isJust, fromMaybe)
 import           Data.Tree
 import           Data.Typeable
-import           GHC.Generics                    (Generic)
 
 import           System.FilePath                 (takeExtension)
 
 ------- Debugging --------------------------------------------------------------
-import Debug.Trace
+--import Debug.Trace
 
-traceShow' :: Show a => a -> a
-traceShow' x = traceShow x x
+--traceShow' :: Show a => a -> a
+--traceShow' x = traceShow x x
 --------------------------------------------------------------------------------
 -- | This data declaration is simply used as a token to distinguish
 --   the Rasterific backend: (1) when calling functions where the type
@@ -221,7 +221,7 @@ renderRTree (Node (RStyle sty) ts)   = R $ do
 -- Frozen nodes will be eliminated once units is merged so we don't
 -- bother with them. Instead we temporarily use a custom adjustDia2D with
 -- no freeze. This means that line widths will be wrong.
-renderRTree (Node (RFrozenTr tr) ts) = R $ do
+renderRTree (Node (RFrozenTr _) ts) = R $ do
   runR $ F.foldMap renderRTree ts
 renderRTree (Node _ ts)              = F.foldMap renderRTree ts
 
@@ -232,10 +232,6 @@ rasterificSizeSpec = lens (\(RasterificOptions {_rasterificSizeSpec = s}) -> s)
 rasterificBypassAdjust :: Lens' (Options Rasterific R2) Bool
 rasterificBypassAdjust = lens (\(RasterificOptions {_rasterificBypassAdjust = b}) -> b)
                      (\o b -> o {_rasterificBypassAdjust = b})
-
--- | Render an object that the Rasterific backend knows how to render.
-renderR :: (Renderable a Rasterific, V a ~ R2) => a -> RenderM ()
-renderR = runR . render Rasterific
 
 rasterificStrokeStyle :: Style v
                      -> (Float, R.Join, (R.Cap, R.Cap), Maybe R.DashPattern)
@@ -259,7 +255,7 @@ fromLineJoin LineJoinBevel = R.JoinMiter 1
 
 -- Rasterific does not currently support a dash offset.
 fromDashing :: Dashing -> R.DashPattern
-fromDashing (Dashing ds d) = map double2Float ds
+fromDashing (Dashing ds _) = map double2Float ds
 
 -- | Get an accumulated style attribute from the render monad state.
 getStyleAttrib :: AttributeClass a => (a -> b) -> RenderM (Maybe b)
@@ -290,13 +286,12 @@ renderSeg (viewLoc -> (p, (Linear (OffsetClosed v)))) =
   R.LinePrim $ R.Line p' (p' + r2v2 v)
   where
     p' = p2v2 p
-renderSeg (viewLoc -> (p, (Cubic v1 v2 (OffsetClosed v3)))) =
-  R.CubicBezierPrim $ R.CubicBezier p0 p1 p2 p3
+renderSeg (viewLoc -> (p, (Cubic u1 u2 (OffsetClosed u3)))) =
+  R.CubicBezierPrim $ R.CubicBezier q0 q1 q2 q3
   where
-    (p0, p1, p2, p3) = (p2v2 p, p0 + r2v2 v1, p0 + r2v2 v2, p0 + r2v2 v3)
-
-renderTrail :: Located (Trail R2) -> [R.Primitive]
-renderTrail tr = map renderSeg (trailLocSegments tr)
+    (q0, q1, q2, q3) = (p2v2 p, q0 + r2v2 u1, q0 + r2v2 u2, q0 + r2v2 u3)
+-- XXX dummy def to satisfy -Werror ?
+renderSeg _ = R.LinePrim $ R.Line (R.V2 0 0) (R.V2 0 0)
 
 renderPath :: Path R2 -> [[R.Primitive]]
 renderPath p = (map . map) renderSeg (pathLocSegments p)
@@ -316,25 +311,24 @@ instance Renderable (Path R2) Rasterific where
         primList = renderPath p
 
         -- For filling we need to put them togehter.
-        prims = concat primList
+        prms = concat primList
 
     -- If a dashing pattern is provided, use @dashedStroke@ otherwise @stroke@.
     maybe (liftR (R.withTexture sColor $ mapM_ (R.stroke l j c) primList))
           (\dsh -> liftR (R.withTexture sColor $ mapM_ (R.dashedStroke dsh l j c) primList))
           d
     -- If there is a clipping path we must use @withClipping@.
-    maybe (when (isJust f) $ liftR (R.withTexture fColor $ R.fill prims))
+    maybe (when (isJust f) $ liftR (R.withTexture fColor $ R.fill prms))
           (\paths -> when (isJust f) $ liftR (R.withClipping
-                          (R.fill (concat . concat $ ((map . map) renderTrail
-                        $ (map (op Path) paths))))
-                          (R.withTexture fColor $ R.fill prims)))
+                          (R.fill (concat . concat $ (map renderPath paths)))
+                          (R.withTexture fColor $ R.fill prms)))
           (op Clip <$> getAttr sty)
 
 instance Renderable (Segment Closed R2) Rasterific where
-  render c = render c . (fromSegments :: [Segment Closed R2] -> Path R2) . (:[])
+  render b = render b . (fromSegments :: [Segment Closed R2] -> Path R2) . (:[])
 
 instance Renderable (Trail R2) Rasterific where
-  render c = render c . pathFromTrail
+  render b = render b . pathFromTrail
 
 renderRasterific :: FilePath -> SizeSpec2D -> Diagram Rasterific R2 -> IO ()
 renderRasterific outFile sizeSpec d = writer outFile img
