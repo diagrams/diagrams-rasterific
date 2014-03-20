@@ -47,13 +47,6 @@
 -- <http://projects.haskell.org/diagrams/doc/cmdline.html>.
 --
 -----------------------------------------------------------------------------
--- XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
---
--- To do:
---  GIF animiation
---
--- XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
--------------------------------------------------------------------------------
 module Diagrams.Backend.Rasterific.CmdLine
         (
          -- * General form of @main@
@@ -64,6 +57,11 @@ module Diagrams.Backend.Rasterific.CmdLine
        , defaultMain
        , multiMain
        , animMain
+       , gifMain
+
+        -- * GIF support
+       , GifOpts(..)
+
 
          -- * Backend tokens
        , Rasterific
@@ -145,7 +143,6 @@ chooseRender opts d =
     ps | last ps `elem` ["png", "tif"] -> do
            let img = renderDia Rasterific
                         ( RasterificOptions
-                          (opts^.output)
                           (mkSizeSpec
                              (fromIntegral <$> opts ^. width )
                              (fromIntegral <$> opts ^. height)
@@ -323,7 +320,7 @@ gifRender (dOpts, gOpts) lst =
                dias = map fst lst
                delays = map snd lst
                size = mkSizeSpec (fromIntegral <$> dOpts^.width) (fromIntegral <$> dOpts^.height)
-               opts = RasterificOptions (dOpts^.output) size False
+               opts = RasterificOptions size False
                imageRGB8s = map (pixelMap dropTransparency . renderDia Rasterific opts) dias
                result = writeGifAnimation'
                            (dOpts^.output)

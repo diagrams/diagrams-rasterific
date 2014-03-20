@@ -48,8 +48,7 @@
 -- particular backend.  For @b ~ Rasterific@ and @v ~ R2@, we have
 --
 -- > data Options Rasterific R2 = RasterificOptions
--- >          { _rasterificFileName      :: String     -- ^ The name of the file you want generated
--- >          , _rasterificSizeSpec      :: SizeSpec2D -- ^ The requested size of the output
+-- >          { _rasterificSizeSpec      :: SizeSpec2D -- ^ The requested size of the output
 -- >          , _rasterificBypassAdjust  :: Bool       -- ^ Should the 'adjustDia' step be bypassed during rendering?
 -- >          }
 --
@@ -163,13 +162,12 @@ instance Backend Rasterific R2 where
   data Render  Rasterific R2 = R (RenderM ())
   type Result  Rasterific R2 = Image PixelRGBA8
   data Options Rasterific R2 = RasterificOptions
-          { _rasterificFileName      :: String     -- ^ The name of the file you want generated
-          , _rasterificSizeSpec      :: SizeSpec2D -- ^ The requested size of the output
+          { _rasterificSizeSpec      :: SizeSpec2D -- ^ The requested size of the output
           , _rasterificBypassAdjust  :: Bool       -- ^ Should the 'adjustDia' step be bypassed during rendering?
           }
     deriving (Show)
 
-  doRender _ (RasterificOptions file size _) (R r) =
+  doRender _ (RasterificOptions size _) (R r) =
     R.renderDrawing (round w) (round h) bgColor r'
     where
       r' = runRenderM r
@@ -226,10 +224,6 @@ renderRTree (Node (RStyle sty) ts)   = R $ do
 renderRTree (Node (RFrozenTr tr) ts) = R $ do
   runR $ F.foldMap renderRTree ts
 renderRTree (Node _ ts)              = F.foldMap renderRTree ts
-
-rasterificFileName :: Lens' (Options Rasterific R2) String
-rasterificFileName = lens (\(RasterificOptions {_rasterificFileName = f}) -> f)
-                     (\o f -> o {_rasterificFileName = f})
 
 rasterificSizeSpec :: Lens' (Options Rasterific R2) SizeSpec2D
 rasterificSizeSpec = lens (\(RasterificOptions {_rasterificSizeSpec = s}) -> s)
@@ -352,4 +346,4 @@ renderRasterific outFile sizeSpec d = writer outFile img
               ".png" -> writePng
               ".tif" -> writeTiff
               _      -> writePng
-    img = renderDia Rasterific (RasterificOptions outFile sizeSpec False) d
+    img = renderDia Rasterific (RasterificOptions sizeSpec False) d
