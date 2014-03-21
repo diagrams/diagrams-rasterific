@@ -13,7 +13,7 @@
 --
 -- Convenient creation of command-line-driven executables for
 -- rendering diagrams using the Rasterific backend. Create
--- png, tif, bmp or animated GIF files.
+-- png, tif, bmp, jpg or animated GIF files.
 --
 -- * 'defaultMain' creates an executable which can render a single
 --   diagram at various options.
@@ -76,8 +76,8 @@ module Diagrams.Backend.Rasterific.CmdLine
        , B
        ) where
 
-import           Diagrams.Prelude   hiding (width, height, interval, (<>)
-                                           ,Image, option)
+import           Diagrams.Prelude             hiding (width, height, interval
+                                             ,Image, option, (<>))
 import           Diagrams.Backend.Rasterific
 import           Diagrams.Backend.CmdLine
 
@@ -93,6 +93,7 @@ import           Control.Lens              ((^.), Lens', makeLenses)
 import           Data.List.Split
 
 #ifdef CMDLINELOOP
+
 import           Data.Maybe               (fromMaybe)
 import           Control.Monad            (when, mplus)
 import           Control.Lens             (_1)
@@ -157,7 +158,7 @@ chooseRender :: DiagramOpts -> Diagram Rasterific R2 -> IO ()
 chooseRender opts d =
   case splitOn "." (opts ^. output) of
     [""] -> putStrLn "No output file given."
-    ps | last ps `elem` ["png", "tif", "bmp"] -> do
+    ps | last ps `elem` ["png", "tif", "bmp", "jpg"] -> do
            let img = renderDia Rasterific
                         ( RasterificOptions
                           (mkSizeSpec
@@ -171,6 +172,7 @@ chooseRender opts d =
              "png" -> writePng (opts^.output) img
              "tif" -> writeTiff (opts^.output) img
              "bmp" -> writeBitmap (opts^.output) img
+             "jpg" -> writeJpeg (opts^.output) img
              _     -> writePng (opts^.output) img
        | otherwise -> putStrLn $ "Unknown file type: " ++ last ps
 

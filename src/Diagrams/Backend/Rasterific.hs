@@ -19,7 +19,7 @@
 --
 -- A full-featured rendering backend for diagrams using Rasterific,
 -- implemented natively in Haskell (making it easy to use on any
--- platform). Can create png, tif, bmp and animated GIFs.
+-- platform). Can create png, tif, bmp, jpg, and animated GIFs.
 --
 -- To invoke the Rasterific backend, you have three options.
 --
@@ -90,6 +90,9 @@ module Diagrams.Backend.Rasterific
   , renderRasterific
   , rasterificSizeSpec
   , rasterificBypassAdjust
+
+  , writeJpeg
+
   ) where
 
 import           Diagrams.Core.Compile       (RNode (..), RTree, toRTree)
@@ -99,8 +102,9 @@ import           Diagrams.TwoD.Adjust        (adjustDiaSize2D,
                                               setDefault2DAttributes)
 import           Diagrams.TwoD.Path          (Clip (Clip))
 
-import           Codec.Picture               (Image (..), PixelRGBA8 (..),
-                                              writePng, writeTiff, writeBitmap)
+import           Codec.Picture
+import           Codec.Picture.Types         (dropTransparency, convertPixel)
+
 import           GHC.Float                   (double2Float)
 import qualified Graphics.Rasterific         as R
 import           Graphics.Rasterific.Texture (uniformTexture)
@@ -110,6 +114,7 @@ import           Control.Monad               (when)
 import           Control.Monad.StateStack
 import           Control.Monad.Trans         (lift)
 
+import qualified Data.ByteString.Lazy as L   (writeFile)
 import           Data.Default.Class
 import qualified Data.Foldable               as F
 import           Data.Maybe                  (fromMaybe, isJust)
@@ -331,6 +336,11 @@ instance Renderable (Segment Closed R2) Rasterific where
 instance Renderable (Trail R2) Rasterific where
   render b = render b . pathFromTrail
 
+writeJpeg :: FilePath -> Result Rasterific R2 -> IO ()
+writeJpeg outFile img = L.writeFile outFile bs
+  where
+    bs = encodeJpegAtQuality 100 (pixelMap (convertPixel . dropTransparency) img)
+
 renderRasterific :: FilePath -> SizeSpec2D -> Diagram Rasterific R2 -> IO ()
 renderRasterific outFile sizeSpec d = writer outFile img
   where
@@ -338,5 +348,6 @@ renderRasterific outFile sizeSpec d = writer outFile img
               ".png" -> writePng
               ".tif" -> writeTiff
               ".bmp" -> writeBitmap
+              ".jpg" -> writeJpeg
               _      -> writePng
     img = renderDia Rasterific (RasterificOptions sizeSpec False) d

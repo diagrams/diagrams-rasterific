@@ -1,6 +1,6 @@
 _diagrams-rasterific_ is a an Rasterific backend for [diagrams]. Diagrams is a powerful,
 flexible, declarative domain-specific language for creating vector graphics,
-using the [Haskell programming language][haskell]. It supports png, tif and
+using the [Haskell programming language][haskell]. It supports png, tif, bmp and
 animated GIF output.
 
 The Rasterific backend is a work in progress, and may contain bugs and lack
