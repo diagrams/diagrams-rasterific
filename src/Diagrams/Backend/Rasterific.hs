@@ -120,6 +120,7 @@ import qualified Data.Foldable               as F
 import           Data.Maybe                  (fromMaybe, isJust)
 import           Data.Tree
 import           Data.Typeable
+import           Data.Word                   (Word8)
 
 import           System.FilePath             (takeExtension)
 
@@ -164,6 +165,8 @@ liftR = lift
 runRenderM :: RenderM a -> RenderR a
 runRenderM = flip evalStateStackT def
 
+-- From Diagrams.Core.Types.
+-- b = Rasterific
 instance Backend Rasterific R2 where
   data Render  Rasterific R2 = R (RenderM ())
   type Result  Rasterific R2 = Image PixelRGBA8
@@ -173,6 +176,7 @@ instance Backend Rasterific R2 where
           }
     deriving (Show)
 
+  -- doRender :: b  -> Options b v  -> Render b v -> Result b v
   doRender _ (RasterificOptions size _) (R r) =
     R.renderDrawing (round w) (round h) bgColor r'
     where
@@ -188,17 +192,25 @@ instance Backend Rasterific R2 where
                 Absolute   -> (100,100)
       bgColor = PixelRGBA8 255 255 255 0
 
-  renderData _ = renderRTree
-               . Node (RStyle (mempty # recommendFillColor (transparent :: AlphaColour Double)))
-               . (:[])
-               . splitFills. toRTree
+  -- renderData :: Monoid' m => b -> QDiagram b v m -> Render b v
+  renderData _ =
+      renderRTree
+    . Node (RStyle (mempty # recommendFillColor (transparent :: AlphaColour Double)))
+    . (:[])
+    . splitFills. toRTree
 
+  -- adjustDia :: Monoid' m => b -> Options b v
+  --           -> QDiagram b v m -> (Options b v, QDiagram b v m)
   adjustDia c opts d = if _rasterificBypassAdjust opts
                          then (opts, d # setDefault2DAttributes)
                          else adjustDia2D _rasterificSizeSpec
                                           setRasterificSizeSpec
                                           c opts (d # reflectY)
     where setRasterificSizeSpec sz o = o { _rasterificSizeSpec = sz }
+
+  -- renderDia :: (InnerSpace v, OrderedField (Scalar v), Monoid' m)
+  --           => b -> Options b v -> QDiagram b v m -> Result b v
+
 
 -- XXX Don't do any freezing, will be removed after units branch is merged
 adjustDia2D :: Monoid' m
@@ -336,18 +348,19 @@ instance Renderable (Segment Closed R2) Rasterific where
 instance Renderable (Trail R2) Rasterific where
   render b = render b . pathFromTrail
 
-writeJpeg :: FilePath -> Result Rasterific R2 -> IO ()
-writeJpeg outFile img = L.writeFile outFile bs
+writeJpeg :: Word8 -> FilePath -> Result Rasterific R2 -> IO ()
+writeJpeg quality outFile img = L.writeFile outFile bs
   where
-    bs = encodeJpegAtQuality 100 (pixelMap (convertPixel . dropTransparency) img)
+    bs = encodeJpegAtQuality quality (pixelMap (convertPixel . dropTransparency) img)
 
-renderRasterific :: FilePath -> SizeSpec2D -> Diagram Rasterific R2 -> IO ()
-renderRasterific outFile sizeSpec d = writer outFile img
+renderRasterific :: FilePath -> SizeSpec2D -> Word8 -> Diagram Rasterific R2 -> IO ()
+renderRasterific outFile sizeSpec quality d = writer outFile img
   where
     writer = case takeExtension outFile of
               ".png" -> writePng
               ".tif" -> writeTiff
               ".bmp" -> writeBitmap
-              ".jpg" -> writeJpeg
+              ".jpg" -> writeJpeg q
               _      -> writePng
     img = renderDia Rasterific (RasterificOptions sizeSpec False) d
+    q = max quality 100
