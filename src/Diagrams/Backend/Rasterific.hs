@@ -101,13 +101,16 @@ import           Diagrams.Prelude            hiding (Image, opacity, view)
 import           Diagrams.TwoD.Adjust        (adjustDiaSize2D,
                                               setDefault2DAttributes)
 import           Diagrams.TwoD.Path          (Clip (Clip))
+import           Diagrams.TwoD.Text          hiding (Font)
 
 import           Codec.Picture
 import           Codec.Picture.Types         (dropTransparency, convertPixel)
 
 import           GHC.Float                   (double2Float)
+
 import qualified Graphics.Rasterific         as R
 import           Graphics.Rasterific.Texture (uniformTexture)
+import           Graphics.Text.TrueType      (loadFontFile, Font)
 
 import           Control.Lens                hiding (transform, ( # ))
 import           Control.Monad               (when)
@@ -123,6 +126,8 @@ import           Data.Typeable
 import           Data.Word                   (Word8)
 
 import           System.FilePath             (takeExtension)
+import           System.IO.Unsafe            (unsafePerformIO)
+import           Paths_diagrams_rasterific   (getDataFileName)
 
 ------- Debugging --------------------------------------------------------------
 --import Debug.Trace
@@ -347,6 +352,22 @@ instance Renderable (Segment Closed R2) Rasterific where
 
 instance Renderable (Trail R2) Rasterific where
   render b = render b . pathFromTrail
+
+-- read only of static date (safe)
+ro :: FilePath -> FilePath
+ro = unsafePerformIO . getDataFileName
+
+openSans_Regular :: Font
+openSans_Regular = fnt
+  where
+    Right fnt = unsafePerformIO . loadFontFile $ (ro "fonts/OpenSans-Regular.ttf")
+
+instance Renderable Text Rasterific where
+  render _ (Text _ _ str) = R $ do
+    f <- getStyleAttrib (toAlphaColour . getFillColor)
+    o <- fromMaybe 1 <$> getStyleAttrib getOpacity
+    let fColor = uniformTexture $ sourceColor f o
+    liftR (R.withTexture fColor $ R.printTextAt openSans_Regular 12 (R.V2 0 0) str)
 
 writeJpeg :: Word8 -> FilePath -> Result Rasterific R2 -> IO ()
 writeJpeg quality outFile img = L.writeFile outFile bs
