@@ -106,7 +106,7 @@ import           Diagrams.TwoD.Text          hiding (Font)
 import           Codec.Picture
 import           Codec.Picture.Types         (dropTransparency, convertPixel)
 
-import           GHC.Float                   (double2Float)
+import           GHC.Float                   (double2Float, float2Double)
 
 import qualified Graphics.Rasterific         as R
 import           Graphics.Rasterific.Texture (uniformTexture)
@@ -304,6 +304,13 @@ p2v2 p = uncurry v2 $ unp2 p
 r2v2 :: R2 -> R.Point
 r2v2 r = uncurry v2 $ unr2 r
 
+rasterificTransf :: T2 -> R.Point -> R.Point
+rasterificTransf tr p = p2v2 $ transform tr p'
+  where
+    p' = mkP2 (float2Double x) (float2Double y)
+    R.V2 x y = p
+
+
 renderSeg :: Located (Segment Closed R2) -> R.Primitive
 renderSeg (viewLoc -> (p, (Linear (OffsetClosed v)))) =
   R.LinePrim $ R.Line p' (p' + r2v2 v)
@@ -363,11 +370,12 @@ openSans_Regular = fnt
     Right fnt = unsafePerformIO . loadFontFile $ (ro "fonts/OpenSans-Regular.ttf")
 
 instance Renderable Text Rasterific where
-  render _ (Text _ _ str) = R $ do
+  render _ (Text tr _ str) = R $ do
     f <- getStyleAttrib (toAlphaColour . getFillColor)
     o <- fromMaybe 1 <$> getStyleAttrib getOpacity
     let fColor = uniformTexture $ sourceColor f o
-    liftR (R.withTexture fColor $ R.printTextAt openSans_Regular 12 (R.V2 0 0) str)
+        p = rasterificTransf tr (R.V2 0 0)
+    liftR (R.withTexture fColor $ R.printTextAt openSans_Regular 12 p str)
 
 writeJpeg :: Word8 -> FilePath -> Result Rasterific R2 -> IO ()
 writeJpeg quality outFile img = L.writeFile outFile bs
