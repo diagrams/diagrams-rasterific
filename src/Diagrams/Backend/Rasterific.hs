@@ -218,8 +218,10 @@ instance Backend Rasterific R2 where
   --           => b -> Options b v -> QDiagram b v m -> Result b v
 
 
--- XXX Don't do any freezing, will be removed after units branch is merged
--- Also sets default font size to 12.
+-- XXX
+-- Frozen nodes will be eliminated once units is merged so we don't
+-- bother with them. Instead we temporarily use a custom adjustDia2D with
+-- no freeze. This means that line widths will be wrong.
 adjustDia2D :: Monoid' m
             => (Options b R2 -> SizeSpec2D)
             -> (SizeSpec2D -> Options b R2 -> Options b R2)
@@ -228,7 +230,7 @@ adjustDia2D :: Monoid' m
 adjustDia2D getSize setSize b opts d
   = adjustDiaSize2D getSize setSize b opts (d # setDefault2DAttributes)
 
-runR :: Render  Rasterific R2 -> RenderM ()
+runR :: Render Rasterific R2 -> RenderM ()
 runR (R r) = r
 
 instance Monoid (Render Rasterific R2) where
@@ -242,12 +244,6 @@ renderRTree (Node (RStyle sty) ts)   = R $ do
   accumStyle %= (<> sty)
   runR $ F.foldMap renderRTree ts
   restore
--- XXX
--- Frozen nodes will be eliminated once units is merged so we don't
--- bother with them. Instead we temporarily use a custom adjustDia2D with
--- no freeze. This means that line widths will be wrong.
-renderRTree (Node (RFrozenTr _) ts) = R $ do
-  runR $ F.foldMap renderRTree ts
 renderRTree (Node _ ts)              = F.foldMap renderRTree ts
 
 rasterificSizeSpec :: Lens' (Options Rasterific R2) SizeSpec2D
@@ -286,7 +282,6 @@ fromDashing (Dashing ds _) = map double2Float ds
 getStyleAttrib :: AttributeClass a => (a -> b) -> RenderM (Maybe b)
 getStyleAttrib f = (fmap f . getAttr) <$> use accumStyle
 
--- XXX Opacity does not seem to be working right. Colors are too translucent.
 sourceColor :: Maybe (AlphaColour Double) -> Double -> PixelRGBA8
 sourceColor Nothing  _ = PixelRGBA8 0 0 0 0
 sourceColor (Just c) o = PixelRGBA8 r g b a
