@@ -73,10 +73,8 @@
 -- XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 --
 -- To do:
---  Fix Opacity
 --  Waiting for Rasterific:
 --    Images
---    Text
 --    Fill Rules
 --    Dash offset
 --
@@ -307,17 +305,18 @@ rasterificTransf tr p =  p2v2 $ transform tr p'
     p' = mkP2 (float2Double x) (float2Double y)
     R.V2 x y = p
 
+-- Note: Using view patterns confuses ghc to think there are missing patterns.
 renderSeg :: Located (Segment Closed R2) -> R.Primitive
-renderSeg (viewLoc -> (p, (Linear (OffsetClosed v)))) =
-  R.LinePrim $ R.Line p' (p' + r2v2 v)
-  where
-    p' = p2v2 p
-renderSeg (viewLoc -> (p, (Cubic u1 u2 (OffsetClosed u3)))) =
-  R.CubicBezierPrim $ R.CubicBezier q0 q1 q2 q3
-  where
-    (q0, q1, q2, q3) = (p2v2 p, q0 + r2v2 u1, q0 + r2v2 u2, q0 + r2v2 u3)
--- XXX dummy def to satisfy -Werror ?
-renderSeg _ = R.LinePrim $ R.Line (R.V2 0 0) (R.V2 0 0)
+renderSeg l =
+  case viewLoc l of
+    (p, (Linear (OffsetClosed v))) ->
+      R.LinePrim $ R.Line p' (p' + r2v2 v)
+      where
+        p' = p2v2 p
+    (p, (Cubic u1 u2 (OffsetClosed u3))) ->
+      R.CubicBezierPrim $ R.CubicBezier q0 q1 q2 q3
+      where
+        (q0, q1, q2, q3) = (p2v2 p, q0 + r2v2 u1, q0 + r2v2 u2, q0 + r2v2 u3)
 
 renderPath :: Path R2 -> [[R.Primitive]]
 renderPath p = (map . map) renderSeg (pathLocSegments p)
