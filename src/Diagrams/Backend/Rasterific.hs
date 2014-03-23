@@ -206,11 +206,12 @@ instance Backend Rasterific R2 where
 
   -- adjustDia :: Monoid' m => b -> Options b v
   --           -> QDiagram b v m -> (Options b v, QDiagram b v m)
+  -- XXX fonsSize set to 12 intead of 1.
   adjustDia c opts d = if _rasterificBypassAdjust opts
                          then (opts, d # setDefault2DAttributes)
                          else adjustDia2D _rasterificSizeSpec
                                           setRasterificSizeSpec
-                                          c opts (d # reflectY)
+                                          c opts (d # reflectY  # fontSize 12)
     where setRasterificSizeSpec sz o = o { _rasterificSizeSpec = sz }
 
   -- renderDia :: (InnerSpace v, OrderedField (Scalar v), Monoid' m)
@@ -218,6 +219,7 @@ instance Backend Rasterific R2 where
 
 
 -- XXX Don't do any freezing, will be removed after units branch is merged
+-- Also sets default font size to 12.
 adjustDia2D :: Monoid' m
             => (Options b R2 -> SizeSpec2D)
             -> (SizeSpec2D -> Options b R2 -> Options b R2)
@@ -305,11 +307,10 @@ r2v2 :: R2 -> R.Point
 r2v2 r = uncurry v2 $ unr2 r
 
 rasterificTransf :: T2 -> R.Point -> R.Point
-rasterificTransf tr p = p2v2 $ transform tr p'
+rasterificTransf tr p =  p2v2 $ transform tr p'
   where
     p' = mkP2 (float2Double x) (float2Double y)
     R.V2 x y = p
-
 
 renderSeg :: Located (Segment Closed R2) -> R.Primitive
 renderSeg (viewLoc -> (p, (Linear (OffsetClosed v)))) =
@@ -364,18 +365,60 @@ instance Renderable (Trail R2) Rasterific where
 ro :: FilePath -> FilePath
 ro = unsafePerformIO . getDataFileName
 
-openSans_Regular :: Font
-openSans_Regular = fnt
+openSansRegular :: Font
+openSansRegular = fnt
   where
     Right fnt = unsafePerformIO . loadFontFile $ (ro "fonts/OpenSans-Regular.ttf")
 
+openSansBold :: Font
+openSansBold = fnt
+  where
+    Right fnt = unsafePerformIO . loadFontFile $ (ro "fonts/OpenSans-Bold.ttf")
+
+openSansItalic :: Font
+openSansItalic = fnt
+  where
+    Right fnt = unsafePerformIO . loadFontFile $ (ro "fonts/OpenSans-Italic.ttf")
+
+openSansBoldItalic :: Font
+openSansBoldItalic = fnt
+  where
+    Right fnt = unsafePerformIO . loadFontFile $ (ro "fonts/OpenSans-BoldItalic.ttf")
+
+fromFontStyle :: FontSlant -> FontWeight -> Font
+fromFontStyle FontSlantItalic FontWeightBold = openSansBoldItalic
+fromFontStyle FontSlantOblique FontWeightBold = openSansBoldItalic
+fromFontStyle FontSlantNormal FontWeightBold = openSansBold
+fromFontStyle FontSlantItalic FontWeightNormal = openSansItalic
+fromFontStyle FontSlantOblique FontWeightNormal = openSansItalic
+fromFontStyle _ _ = openSansRegular
+
+-- Crude approximations
+textExtentsX :: Int -> String -> Double
+textExtentsX fs str = fromIntegral $ fs * length str
+
+textExtentsY :: Int -> Double
+textExtentsY fs = fromIntegral fs
+
+-- Text positioning is base on the rather crude apporximations 'textExtensX' and
+-- 'textExtentsY'. Hopefuly, Rasterific will provide exact functions soon.
 instance Renderable Text Rasterific where
-  render _ (Text tr _ str) = R $ do
+  render _ (Text tr al str) = R $ do
+    fs <- fromMaybe 12 <$> getStyleAttrib getFontSize
+    slant <- fromMaybe FontSlantNormal <$> getStyleAttrib getFontSlant
+    fw <- fromMaybe FontWeightNormal <$> getStyleAttrib getFontWeight
     f <- getStyleAttrib (toAlphaColour . getFillColor)
     o <- fromMaybe 1 <$> getStyleAttrib getOpacity
     let fColor = uniformTexture $ sourceColor f o
-        p = rasterificTransf tr (R.V2 0 0)
-    liftR (R.withTexture fColor $ R.printTextAt openSans_Regular 12 p str)
+        fs' = round fs
+        x = textExtentsX fs' str
+        y = textExtentsY fs'
+        (refX, refY) = case al of
+          BaselineText -> (0, y)
+          BoxAlignedText xt yt -> (lerp 0 (0.5 * x) xt, (1 - yt) * y)
+        p = rasterificTransf ((moveOriginBy (r2 (refX, refY)) mempty) <> tr) (R.V2 0 0)
+        fnt = fromFontStyle slant fw
+    liftR (R.withTexture fColor $ R.printTextAt fnt fs' p str)
 
 writeJpeg :: Word8 -> FilePath -> Result Rasterific R2 -> IO ()
 writeJpeg quality outFile img = L.writeFile outFile bs
