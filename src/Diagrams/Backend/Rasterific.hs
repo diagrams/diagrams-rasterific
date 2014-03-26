@@ -108,7 +108,7 @@ import           GHC.Float                   (double2Float, float2Double)
 
 import qualified Graphics.Rasterific         as R
 import           Graphics.Rasterific.Texture (uniformTexture)
-import           Graphics.Text.TrueType      (loadFontFile, Font)
+import           Graphics.Text.TrueType      (loadFontFile, Font, stringBoundingBox)
 
 import           Control.Lens                hiding (transform, ( # ))
 import           Control.Monad               (when)
@@ -394,12 +394,10 @@ fromFontStyle FontSlantItalic FontWeightNormal = openSansItalic
 fromFontStyle FontSlantOblique FontWeightNormal = openSansItalic
 fromFontStyle _ _ = openSansRegular
 
--- Crude approximations
-textExtentsX :: Int -> String -> Double
-textExtentsX fs str = fromIntegral $ fs * length str
-
-textExtentsY :: Int -> Double
-textExtentsY fs = fromIntegral fs
+textBox :: Font -> Int -> String -> (Double, Double)
+textBox f ps str = (float2Double w, float2Double h)
+  where
+    (w, h) = stringBoundingBox f 92 ps str
 
 -- Text positioning is base on the rather crude apporximations 'textExtensX' and
 -- 'textExtentsY'. Hopefuly, Rasterific will provide exact functions soon.
@@ -412,13 +410,14 @@ instance Renderable Text Rasterific where
     o <- fromMaybe 1 <$> getStyleAttrib getOpacity
     let fColor = uniformTexture $ sourceColor f o
         fs' = round fs
-        x = textExtentsX fs' str
-        y = textExtentsY fs'
+        fnt = fromFontStyle slant fw
+        --x = textExtentsX fs' str
+        --y = textExtentsY fs'
+        (x, y) = textBox fnt fs' str
         (refX, refY) = case al of
           BaselineText -> (0, y)
-          BoxAlignedText xt yt -> (lerp 0 (0.5 * x) xt, (1 - yt) * y)
+          BoxAlignedText xt yt -> (x * xt, (1 - yt) * y)
         p = rasterificTransf ((moveOriginBy (r2 (refX, refY)) mempty) <> tr) (R.V2 0 0)
-        fnt = fromFontStyle slant fw
     liftR (R.withTexture fColor $ R.printTextAt fnt fs' p str)
 
 writeJpeg :: Word8 -> FilePath -> Result Rasterific R2 -> IO ()
