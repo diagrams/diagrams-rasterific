@@ -253,14 +253,14 @@ rasterificBypassAdjust = lens (\(RasterificOptions {_rasterificBypassAdjust = b}
                      (\o b -> o {_rasterificBypassAdjust = b})
 
 rasterificStrokeStyle :: Style v
-                     -> (Float, R.Join, (R.Cap, R.Cap), Maybe R.DashPattern)
-rasterificStrokeStyle s = (strokeWidth, strokeJoin, strokeCaps, dashPattern)
+                     -> (Float, R.Join, (R.Cap, R.Cap), Maybe (R.DashPattern, Float))
+rasterificStrokeStyle s = (strokeWidth, strokeJoin, strokeCaps, strokeDash)
   where
     strokeWidth = double2Float $ fromMaybe 0.01 (getLineWidth <$> getAttr s)
     strokeJoin = fromMaybe (R.JoinMiter 0) (fromLineJoin . getLineJoin <$> getAttr s)
     strokeCaps = (strokeCap, strokeCap)
     strokeCap = fromMaybe (R.CapStraight 0) (fromLineCap . getLineCap <$> getAttr s)
-    dashPattern = fromDashing . getDashing <$> getAttr s
+    strokeDash = fromDashing . getDashing <$> getAttr s
 
 fromLineCap :: LineCap -> R.Cap
 fromLineCap LineCapButt   = R.CapStraight 0
@@ -273,8 +273,8 @@ fromLineJoin LineJoinRound = R.JoinRound
 fromLineJoin LineJoinBevel = R.JoinMiter 1
 
 -- Rasterific does not currently support a dash offset.
-fromDashing :: Dashing -> R.DashPattern
-fromDashing (Dashing ds _) = map double2Float ds
+fromDashing :: Dashing -> (R.DashPattern, Float)
+fromDashing (Dashing ds d) = (map double2Float ds, double2Float d)
 
 fromFillRule :: FillRule -> R.FillMethod
 fromFillRule EvenOdd = R.FillEvenOdd
@@ -353,7 +353,8 @@ instance Renderable (Path R2) Rasterific where
 
     -- If a dashing pattern is provided, use @dashedStroke@ otherwise @stroke@.
     maybe (liftR (R.withTexture sColor $ mapM_ (R.stroke l j c) primList))
-          (\dsh -> liftR (R.withTexture sColor $ mapM_ (R.dashedStroke dsh l j c) primList))
+          (\(dsh, off)  -> liftR (R.withTexture sColor
+           $ mapM_ (R.dashedStrokeWithOffset off dsh l j c) primList))
           d
 
 instance Renderable (Segment Closed R2) Rasterific where
@@ -397,7 +398,7 @@ fromFontStyle _ _ = openSansRegular
 textBox :: Font -> Int -> String -> (Double, Double)
 textBox f ps str = (float2Double w, float2Double h)
   where
-    (w, h) = stringBoundingBox f 92 ps str
+    (w, h) = stringBoundingBox f 96 ps str
 
 -- Text positioning is base on the rather crude apporximations 'textExtensX' and
 -- 'textExtentsY'. Hopefuly, Rasterific will provide exact functions soon.
@@ -411,8 +412,6 @@ instance Renderable Text Rasterific where
     let fColor = uniformTexture $ sourceColor f o
         fs' = round fs
         fnt = fromFontStyle slant fw
-        --x = textExtentsX fs' str
-        --y = textExtentsY fs'
         (x, y) = textBox fnt fs' str
         (refX, refY) = case al of
           BaselineText -> (0, y)
