@@ -98,7 +98,7 @@ import           Diagrams.Core.Transform
 import           Diagrams.Prelude            hiding (Image, opacity, view)
 import           Diagrams.TwoD.Adjust        (adjustDiaSize2D,
                                               setDefault2DAttributes)
-import           Diagrams.TwoD.Path          (Clip (Clip))
+import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule)
 import           Diagrams.TwoD.Text          hiding (Font)
 
 import           Codec.Picture
@@ -276,6 +276,10 @@ fromLineJoin LineJoinBevel = R.JoinMiter 1
 fromDashing :: Dashing -> R.DashPattern
 fromDashing (Dashing ds _) = map double2Float ds
 
+fromFillRule :: FillRule -> R.FillMethod
+fromFillRule EvenOdd = R.FillEvenOdd
+fromFillRule _ = R.FillWinding
+
 -- | Get an accumulated style attribute from the render monad state.
 getStyleAttrib :: AttributeClass a => (a -> b) -> RenderM (Maybe b)
 getStyleAttrib f = (fmap f . getAttr) <$> use accumStyle
@@ -326,11 +330,13 @@ instance Renderable (Path R2) Rasterific where
     f <- getStyleAttrib (toAlphaColour . getFillColor)
     s <- getStyleAttrib (toAlphaColour . getLineColor)
     o <- fromMaybe 1 <$> getStyleAttrib getOpacity
+    r <- fromMaybe Winding <$> getStyleAttrib getFillRule
     sty <- use accumStyle
 
     let fColor = uniformTexture $ sourceColor f o
         sColor = uniformTexture $ sourceColor s o
         (l, j, c, d) = rasterificStrokeStyle sty
+        rule = fromFillRule r
 
         -- For stroking we need to keep all of the contours separate.
         primList = renderPath p
@@ -338,16 +344,17 @@ instance Renderable (Path R2) Rasterific where
         -- For filling we need to put them togehter.
         prms = concat primList
 
+    -- If there is a clipping path we must use @withClipping@.
+    maybe (when (isJust f) $ liftR (R.withTexture fColor $ R.fillWithMethod rule prms))
+          (\paths -> when (isJust f) $ liftR (R.withClipping
+                          (R.fill (concat . concat $ (map renderPath paths)))
+                          (R.withTexture fColor $ R.fillWithMethod rule prms)))
+          (op Clip <$> getAttr sty)
+
     -- If a dashing pattern is provided, use @dashedStroke@ otherwise @stroke@.
     maybe (liftR (R.withTexture sColor $ mapM_ (R.stroke l j c) primList))
           (\dsh -> liftR (R.withTexture sColor $ mapM_ (R.dashedStroke dsh l j c) primList))
           d
-    -- If there is a clipping path we must use @withClipping@.
-    maybe (when (isJust f) $ liftR (R.withTexture fColor $ R.fill prms))
-          (\paths -> when (isJust f) $ liftR (R.withClipping
-                          (R.fill (concat . concat $ (map renderPath paths)))
-                          (R.withTexture fColor $ R.fill prms)))
-          (op Clip <$> getAttr sty)
 
 instance Renderable (Segment Closed R2) Rasterific where
   render b = render b . (fromSegments :: [Segment Closed R2] -> Path R2) . (:[])

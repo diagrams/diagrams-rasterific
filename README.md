@@ -10,7 +10,6 @@ evolve.
 - line widths wont scale with image size (use approx 10X the norm). This will
   be fixed once the units branch is merged.
 - No support for images.
-- No fill rules.
 - No Dash offset
 
 [diagrams]: http://projects.haskell.org/diagrams/
