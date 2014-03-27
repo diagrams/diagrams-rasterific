@@ -115,6 +115,7 @@ import           Control.Monad               (when)
 import           Control.Monad.StateStack
 import           Control.Monad.Trans         (lift)
 
+
 import qualified Data.ByteString.Lazy as L   (writeFile)
 import           Data.Default.Class
 import qualified Data.Foldable               as F
@@ -169,7 +170,6 @@ runRenderM :: RenderM a -> RenderR a
 runRenderM = flip evalStateStackT def
 
 -- From Diagrams.Core.Types.
--- b = Rasterific
 instance Backend Rasterific R2 where
   data Render  Rasterific R2 = R (RenderM ())
   type Result  Rasterific R2 = Image PixelRGBA8
@@ -179,7 +179,6 @@ instance Backend Rasterific R2 where
           }
     deriving (Show)
 
-  -- doRender :: b  -> Options b v  -> Render b v -> Result b v
   doRender _ (RasterificOptions size _) (R r) =
     R.renderDrawing (round w) (round h) bgColor r'
     where
@@ -195,15 +194,12 @@ instance Backend Rasterific R2 where
                 Absolute   -> (100,100)
       bgColor = PixelRGBA8 255 255 255 0
 
-  -- renderData :: Monoid' m => b -> QDiagram b v m -> Render b v
   renderData _ =
       renderRTree
     . Node (RStyle (mempty # recommendFillColor (transparent :: AlphaColour Double)))
     . (:[])
     . splitFills. toRTree
 
-  -- adjustDia :: Monoid' m => b -> Options b v
-  --           -> QDiagram b v m -> (Options b v, QDiagram b v m)
   -- XXX fonsSize set to 12 intead of 1.
   adjustDia c opts d = if _rasterificBypassAdjust opts
                          then (opts, d # setDefault2DAttributes)
@@ -237,12 +233,15 @@ instance Monoid (Render Rasterific R2) where
 
 renderRTree :: RTree Rasterific R2 a -> Render Rasterific R2
 renderRTree (Node (RPrim accTr p) _) = render Rasterific (transform accTr p)
-renderRTree (Node (RStyle sty) ts)   = R $ do
+renderRTree (Node (RStyle sty) ts) = R $ do
   save
   accumStyle %= (<> sty)
-  runR $ F.foldMap renderRTree ts
+  aStyle <- use accumStyle
+  let R r = F.foldMap renderRTree ts
+      m = evalStateStackT r (RasterificState aStyle)
+  clip sty m
   restore
-renderRTree (Node _ ts)              = F.foldMap renderRTree ts
+renderRTree (Node _ ts) = F.foldMap renderRTree ts
 
 rasterificSizeSpec :: Lens' (Options Rasterific R2) SizeSpec2D
 rasterificSizeSpec = lens (\(RasterificOptions {_rasterificSizeSpec = s}) -> s)
@@ -272,7 +271,6 @@ fromLineJoin LineJoinMiter = R.JoinMiter 0
 fromLineJoin LineJoinRound = R.JoinRound
 fromLineJoin LineJoinBevel = R.JoinMiter 1
 
--- Rasterific does not currently support a dash offset.
 fromDashing :: Dashing -> (R.DashPattern, Float)
 fromDashing (Dashing ds d) = (map double2Float ds, double2Float d)
 
@@ -309,7 +307,8 @@ rasterificTransf tr p =  p2v2 $ transform tr p'
     p' = mkP2 (float2Double x) (float2Double y)
     R.V2 x y = p
 
--- Note: Using view patterns confuses ghc to think there are missing patterns.
+-- Note: Using view patterns confuses ghc to think there are missing patterns,
+-- so we avoid them here.
 renderSeg :: Located (Segment Closed R2) -> R.Primitive
 renderSeg l =
   case viewLoc l of
@@ -325,14 +324,12 @@ renderSeg l =
 renderPath :: Path R2 -> [[R.Primitive]]
 renderPath p = (map . map) renderSeg (pathLocSegments p)
 
--- Fill both clipped and unclipped regions.
-withClipping :: Maybe [Path R2] -> RenderR () -> RenderR ()
-withClipping clip drawing =
-  maybe drawing
-        (\paths -> R.withClipping
-                  (R.fill (concat . concat $ (map renderPath paths)))
-                   drawing)
-        clip
+clip :: Style v -> RenderR () -> RenderM ()
+clip sty d =
+  maybe (liftR d)
+        (\paths -> liftR $ R.withClipping
+                  (R.fill (concat . concat $ (map renderPath paths))) d)
+        (op Clip <$> getAttr sty)
 
 -- Stroke both dashed and solid lines.
 mkStroke :: Float ->  R.Join -> (R.Cap, R.Cap) ->  Maybe (R.DashPattern, Float)
@@ -360,12 +357,9 @@ instance Renderable (Path R2) Rasterific where
 
         -- For filling we need to concatenate them into a flat list.
         prms = concat primList
-        clip = op Clip <$> getAttr sty
 
-    when (isJust f) $ liftR (withClipping clip
-                            (R.withTexture fColor $ R.fillWithMethod rule prms))
-    liftR (withClipping clip
-          (R.withTexture sColor $ mkStroke l j c d primList))
+    when (isJust f) $ liftR (R.withTexture fColor $ R.fillWithMethod rule prms)
+    liftR (R.withTexture sColor $ mkStroke l j c d primList)
 
 instance Renderable (Segment Closed R2) Rasterific where
   render b = render b . (fromSegments :: [Segment Closed R2] -> Path R2) . (:[])
@@ -410,8 +404,6 @@ textBox f ps str = (float2Double w, float2Double h)
   where
     (w, h) = stringBoundingBox f 96 ps str
 
--- Text positioning is base on the rather crude apporximations 'textExtensX' and
--- 'textExtentsY'. Hopefuly, Rasterific will provide exact functions soon.
 instance Renderable Text Rasterific where
   render _ (Text tr al str) = R $ do
     fs <- fromMaybe 12 <$> getStyleAttrib getFontSize
