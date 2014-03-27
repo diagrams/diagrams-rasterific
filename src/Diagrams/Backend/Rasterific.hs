@@ -325,6 +325,23 @@ renderSeg l =
 renderPath :: Path R2 -> [[R.Primitive]]
 renderPath p = (map . map) renderSeg (pathLocSegments p)
 
+-- Fill both clipped and unclipped regions.
+withClipping :: Maybe [Path R2] -> RenderR () -> RenderR ()
+withClipping clip drawing =
+  maybe drawing
+        (\paths -> R.withClipping
+                  (R.fill (concat . concat $ (map renderPath paths)))
+                   drawing)
+        clip
+
+-- Stroke both dashed and solid lines.
+mkStroke :: Float ->  R.Join -> (R.Cap, R.Cap) ->  Maybe (R.DashPattern, Float)
+      -> [[R.Primitive]] -> RenderR ()
+mkStroke l j c d  primList =
+  maybe (mapM_ (R.stroke l j c) primList)
+        (\(dsh, off) -> mapM_ (R.dashedStrokeWithOffset off dsh l j c) primList)
+        d
+
 instance Renderable (Path R2) Rasterific where
   render _ p = R $ do
     f <- getStyleAttrib (toAlphaColour . getFillColor)
@@ -341,21 +358,14 @@ instance Renderable (Path R2) Rasterific where
         -- For stroking we need to keep all of the contours separate.
         primList = renderPath p
 
-        -- For filling we need to put them togehter.
+        -- For filling we need to concatenate them into a flat list.
         prms = concat primList
+        clip = op Clip <$> getAttr sty
 
-    -- If there is a clipping path we must use @withClipping@.
-    maybe (when (isJust f) $ liftR (R.withTexture fColor $ R.fillWithMethod rule prms))
-          (\paths -> when (isJust f) $ liftR (R.withClipping
-                          (R.fill (concat . concat $ (map renderPath paths)))
-                          (R.withTexture fColor $ R.fillWithMethod rule prms)))
-          (op Clip <$> getAttr sty)
-
-    -- If a dashing pattern is provided, use @dashedStroke@ otherwise @stroke@.
-    maybe (liftR (R.withTexture sColor $ mapM_ (R.stroke l j c) primList))
-          (\(dsh, off)  -> liftR (R.withTexture sColor
-           $ mapM_ (R.dashedStrokeWithOffset off dsh l j c) primList))
-          d
+    when (isJust f) $ liftR (withClipping clip
+                            (R.withTexture fColor $ R.fillWithMethod rule prms))
+    liftR (withClipping clip
+          (R.withTexture sColor $ mkStroke l j c d primList))
 
 instance Renderable (Segment Closed R2) Rasterific where
   render b = render b . (fromSegments :: [Segment Closed R2] -> Path R2) . (:[])
