@@ -208,10 +208,6 @@ instance Backend Rasterific R2 where
                                           c opts (d # reflectY  # fontSize 12)
     where setRasterificSizeSpec sz o = o { _rasterificSizeSpec = sz }
 
-  -- renderDia :: (InnerSpace v, OrderedField (Scalar v), Monoid' m)
-  --           => b -> Options b v -> QDiagram b v m -> Result b v
-
-
 -- XXX
 -- Frozen nodes will be eliminated once units is merged so we don't
 -- bother with them. Instead we temporarily use a custom adjustDia2D with
