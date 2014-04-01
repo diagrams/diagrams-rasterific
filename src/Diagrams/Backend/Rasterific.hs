@@ -92,7 +92,6 @@ module Diagrams.Backend.Rasterific
 
 import           Diagrams.Core.Compile
 import           Diagrams.Core.Transform
-import           Diagrams.Core.Types         (Annotation)
 
 
 import           Diagrams.Prelude            hiding (Image, opacity, view)
@@ -182,14 +181,12 @@ instance Backend Rasterific R2 where
     R.renderDrawing (round w) (round h) bgColor r
     where
       r = runRenderM . runR . toRender $ t
-      --r = runRenderM r'
-      --R r' = toRender t
       (w,h) = sizePair (opts^.size)
       bgColor = PixelRGBA8 255 255 255 0
 
   adjustDia c opts d = adjustDia2D size c opts (d # reflectY # fontSize 12)
 
-toRender :: RTree Rasterific R2 Annotation -> Render Rasterific R2
+toRender :: RTree Rasterific R2 a -> Render Rasterific R2
 toRender = fromRTree
   . Node (RStyle (mempty # recommendFillColor (transparent :: AlphaColour Double)))
   . (:[])
