@@ -165,7 +165,6 @@ chooseRender opts d =
                              (fromIntegral <$> opts ^. width )
                              (fromIntegral <$> opts ^. height)
                           )
-                          False
                         )
                         d
            case last ps of
@@ -337,9 +336,9 @@ gifRender (dOpts, gOpts) lst =
                                 Just n  -> LoopingRepeat (fromIntegral n)
                dias = map fst lst
                delays = map snd lst
-               size = mkSizeSpec (fromIntegral <$> dOpts^.width)
+               sizeSpec = mkSizeSpec (fromIntegral <$> dOpts^.width)
                                  (fromIntegral <$> dOpts^.height)
-               opts = RasterificOptions size False
+               opts = RasterificOptions sizeSpec
                imageRGB8s = map (pixelMap dropTransparency
                                . renderDia Rasterific opts) dias
                result = writeGifAnimation' (dOpts^.output) delays

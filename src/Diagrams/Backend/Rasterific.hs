@@ -75,8 +75,6 @@
 -- To do:
 --  Waiting for Rasterific:
 --    Images
---    Fill Rules
---    Dash offset
 --
 -- XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 -------------------------------------------------------------------------------
@@ -86,19 +84,21 @@ module Diagrams.Backend.Rasterific
   , Options(..)
 
   , renderRasterific
-  , rasterificSizeSpec
-  , rasterificBypassAdjust
+  , size
 
   , writeJpeg
 
   ) where
 
-import           Diagrams.Core.Compile       (RNode (..), RTree, toRTree)
+import           Diagrams.Core.Compile
 import           Diagrams.Core.Transform
+import           Diagrams.Core.Types         (Annotation)
+
+
 import           Diagrams.Prelude            hiding (Image, opacity, view)
-import           Diagrams.TwoD.Adjust        (adjustDiaSize2D,
-                                              setDefault2DAttributes)
+import           Diagrams.TwoD.Adjust        (adjustDia2D)
 import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule)
+import           Diagrams.TwoD.Size          (sizePair)
 import           Diagrams.TwoD.Text          hiding (Font)
 
 import           Codec.Picture
@@ -174,51 +174,37 @@ instance Backend Rasterific R2 where
   data Render  Rasterific R2 = R (RenderM ())
   type Result  Rasterific R2 = Image PixelRGBA8
   data Options Rasterific R2 = RasterificOptions
-          { _rasterificSizeSpec      :: SizeSpec2D -- ^ The requested size of the output
-          , _rasterificBypassAdjust  :: Bool       -- ^ Should the 'adjustDia' step be bypassed during rendering?
+          { _size      :: SizeSpec2D -- ^ The requested size of the output
           }
     deriving (Show)
 
-  doRender _ (RasterificOptions size _) (R r) =
-    R.renderDrawing (round w) (round h) bgColor r'
+  renderRTree _ opts t =
+    R.renderDrawing (round w) (round h) bgColor r
     where
-      r' = runRenderM r
-      -- Everything except Dims is arbitrary. The backend
-      -- should have first run 'adjustDia' to update the
-      -- final size of the diagram with explicit dimensions,
-      -- so normally we would only expect to get Dims anyway.
-      (w,h) = case size of
-                Width w'   -> (w',w')
-                Height h'  -> (h',h')
-                Dims w' h' -> (w',h')
-                Absolute   -> (100,100)
+      r = runRenderM . runR . toRender $ t
+      --r = runRenderM r'
+      --R r' = toRender t
+      (w,h) = sizePair (opts^.size)
       bgColor = PixelRGBA8 255 255 255 0
 
-  renderData _ =
-      renderRTree
-    . Node (RStyle (mempty # recommendFillColor (transparent :: AlphaColour Double)))
-    . (:[])
-    . splitFills. toRTree
+  adjustDia c opts d = adjustDia2D size c opts (d # reflectY # fontSize 12)
 
-  -- XXX fonsSize set to 12 intead of 1.
-  adjustDia c opts d = if _rasterificBypassAdjust opts
-                         then (opts, d # setDefault2DAttributes)
-                         else adjustDia2D _rasterificSizeSpec
-                                          setRasterificSizeSpec
-                                          c opts (d # reflectY  # fontSize 12)
-    where setRasterificSizeSpec sz o = o { _rasterificSizeSpec = sz }
-
--- XXX
--- Frozen nodes will be eliminated once units is merged so we don't
--- bother with them. Instead we temporarily use a custom adjustDia2D with
--- no freeze. This means that line widths will be wrong.
-adjustDia2D :: Monoid' m
-            => (Options b R2 -> SizeSpec2D)
-            -> (SizeSpec2D -> Options b R2 -> Options b R2)
-            -> b -> Options b R2 -> QDiagram b R2 m
-            -> (Options b R2, QDiagram b R2 m)
-adjustDia2D getSize setSize b opts d
-  = adjustDiaSize2D getSize setSize b opts (d # setDefault2DAttributes)
+toRender :: RTree Rasterific R2 Annotation -> Render Rasterific R2
+toRender = fromRTree
+  . Node (RStyle (mempty # recommendFillColor (transparent :: AlphaColour Double)))
+  . (:[])
+  . splitFills
+    where
+      fromRTree (Node (RPrim p) _) = render Rasterific p
+      fromRTree (Node (RStyle sty) rs) = R $ do
+        save
+        accumStyle %= (<> sty)
+        aStyle <- use accumStyle
+        let R r = F.foldMap fromRTree rs
+            m = evalStateStackT r (RasterificState aStyle)
+        clip sty m
+        restore
+      fromRTree (Node _ rs) = F.foldMap fromRTree rs
 
 runR :: Render Rasterific R2 -> RenderM ()
 runR (R r) = r
@@ -227,31 +213,17 @@ instance Monoid (Render Rasterific R2) where
   mempty  = R $ return ()
   (R rd1) `mappend` (R rd2) = R (rd1 >> rd2)
 
-renderRTree :: RTree Rasterific R2 a -> Render Rasterific R2
-renderRTree (Node (RPrim accTr p) _) = render Rasterific (transform accTr p)
-renderRTree (Node (RStyle sty) ts) = R $ do
-  save
-  accumStyle %= (<> sty)
-  aStyle <- use accumStyle
-  let R r = F.foldMap renderRTree ts
-      m = evalStateStackT r (RasterificState aStyle)
-  clip sty m
-  restore
-renderRTree (Node _ ts) = F.foldMap renderRTree ts
-
-rasterificSizeSpec :: Lens' (Options Rasterific R2) SizeSpec2D
-rasterificSizeSpec = lens (\(RasterificOptions {_rasterificSizeSpec = s}) -> s)
-                     (\o s -> o {_rasterificSizeSpec = s})
-
-rasterificBypassAdjust :: Lens' (Options Rasterific R2) Bool
-rasterificBypassAdjust = lens (\(RasterificOptions {_rasterificBypassAdjust = b}) -> b)
-                     (\o b -> o {_rasterificBypassAdjust = b})
+size :: Lens' (Options Rasterific R2) SizeSpec2D
+size = lens (\(RasterificOptions {_size = s}) -> s)
+                     (\o s -> o {_size = s})
 
 rasterificStrokeStyle :: Style v
                      -> (Float, R.Join, (R.Cap, R.Cap), Maybe (R.DashPattern, Float))
 rasterificStrokeStyle s = (strokeWidth, strokeJoin, strokeCaps, strokeDash)
   where
-    strokeWidth = double2Float $ fromMaybe 0.01 (getLineWidth <$> getAttr s)
+    strokeWidth = double2Float $ case getLineWidth <$> getAttr s of
+                      Just (Output w) ->  w
+                      _               ->  1
     strokeJoin = fromMaybe (R.JoinMiter 0) (fromLineJoin . getLineJoin <$> getAttr s)
     strokeCaps = (strokeCap, strokeCap)
     strokeCap = fromMaybe (R.CapStraight 0) (fromLineCap . getLineCap <$> getAttr s)
@@ -268,7 +240,10 @@ fromLineJoin LineJoinRound = R.JoinRound
 fromLineJoin LineJoinBevel = R.JoinMiter 1
 
 fromDashing :: Dashing -> (R.DashPattern, Float)
-fromDashing (Dashing ds d) = (map double2Float ds, double2Float d)
+fromDashing (Dashing ds d) = (map double2Float ds', double2Float d')
+  where
+    ds' = [x | Output x <- ds]
+    Output d' = d
 
 fromFillRule :: FillRule -> R.FillMethod
 fromFillRule EvenOdd = R.FillEvenOdd
@@ -402,7 +377,7 @@ textBox f ps str = (float2Double w, float2Double h)
 
 instance Renderable Text Rasterific where
   render _ (Text tr al str) = R $ do
-    fs <- fromMaybe 12 <$> getStyleAttrib getFontSize
+    Output fs <- fromMaybe (Output 12) <$> getStyleAttrib getFontSize
     slant <- fromMaybe FontSlantNormal <$> getStyleAttrib getFontSlant
     fw <- fromMaybe FontWeightNormal <$> getStyleAttrib getFontWeight
     f <- getStyleAttrib (toAlphaColour . getFillColor)
@@ -431,5 +406,5 @@ renderRasterific outFile sizeSpec quality d = writer outFile img
               ".bmp" -> writeBitmap
               ".jpg" -> writeJpeg q
               _      -> writePng
-    img = renderDia Rasterific (RasterificOptions sizeSpec False) d
+    img = renderDia Rasterific (RasterificOptions sizeSpec) d
     q = max quality 100
