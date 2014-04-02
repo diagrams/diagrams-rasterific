@@ -219,7 +219,7 @@ rasterificStrokeStyle :: Style v
 rasterificStrokeStyle s = (strokeWidth, strokeJoin, strokeCaps, strokeDash)
   where
     strokeWidth = double2Float $ case getLineWidth <$> getAttr s of
-                      Just (Output w) ->  w
+                      Just o ->  fromOutput o
                       _               ->  1
     strokeJoin = fromMaybe (R.JoinMiter 0) (fromLineJoin . getLineJoin <$> getAttr s)
     strokeCaps = (strokeCap, strokeCap)
@@ -239,8 +239,8 @@ fromLineJoin LineJoinBevel = R.JoinMiter 1
 fromDashing :: Dashing -> (R.DashPattern, Float)
 fromDashing (Dashing ds d) = (map double2Float ds', double2Float d')
   where
-    ds' = [x | Output x <- ds]
-    Output d' = d
+    ds' = map fromOutput ds
+    d' = fromOutput d
 
 fromFillRule :: FillRule -> R.FillMethod
 fromFillRule EvenOdd = R.FillEvenOdd
@@ -374,7 +374,7 @@ textBox f ps str = (float2Double w, float2Double h)
 
 instance Renderable Text Rasterific where
   render _ (Text tr al str) = R $ do
-    Output fs <- fromMaybe (Output 12) <$> getStyleAttrib getFontSize
+    fs <- fromMaybe 12 <$> getStyleAttrib (fromOutput . getFontSize)
     slant <- fromMaybe FontSlantNormal <$> getStyleAttrib getFontSlant
     fw <- fromMaybe FontWeightNormal <$> getStyleAttrib getFontWeight
     f <- getStyleAttrib (toAlphaColour . getFillColor)
