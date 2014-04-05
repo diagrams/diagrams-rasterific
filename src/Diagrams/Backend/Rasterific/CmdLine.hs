@@ -71,6 +71,9 @@ module Diagrams.Backend.Rasterific.CmdLine
         -- * GIF support
        , GifOpts(..)
 
+        -- * Juicy Pixel image support
+       , JPimage(..)
+
          -- * Backend tokens
        , Rasterific
        , B

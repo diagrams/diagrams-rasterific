@@ -83,6 +83,8 @@ module Diagrams.Backend.Rasterific
   , B -- rendering token
   , Options(..)
 
+  , JPimage(..)
+
   , renderRasterific
   , size
 
@@ -96,6 +98,7 @@ import           Diagrams.Core.Transform
 
 import           Diagrams.Prelude            hiding (Image, opacity, view)
 import           Diagrams.TwoD.Adjust        (adjustDia2D)
+--import qualified Diagrams.TwoD.Image         as D
 import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule)
 import           Diagrams.TwoD.Size          (sizePair)
 import           Diagrams.TwoD.Text          hiding (Font)
@@ -116,6 +119,7 @@ import           Control.Monad.Trans         (lift)
 
 
 import qualified Data.ByteString.Lazy as L   (writeFile)
+import           Data.ByteString             (ByteString)
 import           Data.Default.Class
 import qualified Data.Foldable               as F
 import           Data.Maybe                  (fromMaybe, isJust)
@@ -335,7 +339,7 @@ instance Renderable (Segment Closed R2) Rasterific where
 instance Renderable (Trail R2) Rasterific where
   render b = render b . pathFromTrail
 
--- read only of static date (safe)
+-- read only of static data (safe)
 ro :: FilePath -> FilePath
 ro = unsafePerformIO . getDataFileName
 
@@ -388,6 +392,35 @@ instance Renderable Text Rasterific where
           BoxAlignedText xt yt -> (x * xt, (1 - yt) * y)
         p = rasterificTransf ((moveOriginBy (r2 (refX, refY)) mempty) <> tr) (R.V2 0 0)
     liftR (R.withTexture fColor $ R.printTextAt fnt fs' p str)
+
+data JPimage = JPimage { _imgData     :: ByteString
+                       , _jpImgSize   :: SizeSpec2D
+                       , _jpImgTransf :: T2
+                       }
+  deriving Typeable
+
+makeLenses ''JPimage
+
+type instance V JPimage = R2
+
+instance Transformable JPimage where
+  transform t1 (JPimage iD sz t2) = JPimage iD sz (t1 <> t2)
+
+instance HasOrigin JPimage where
+  moveOriginTo p = translate (origin .-. p)
+
+instance Renderable JPimage Rasterific where
+  render _ (JPimage iD sz tr) = R . liftR $ R.drawImageAtSize img 0 p w h
+    where
+      dImg = decodeImage iD
+      img = case dImg of
+        Left _ -> error "Cannot decode image data"
+        Right dImg' ->
+          case dImg' of
+            ImageRGBA8 i -> i
+            _            -> error "Invalid image type"
+      R.V2 w h = uncurry v2 $ sizePair sz
+      p = rasterificTransf tr (R.V2 0 0)
 
 writeJpeg :: Word8 -> FilePath -> Result Rasterific R2 -> IO ()
 writeJpeg quality outFile img = L.writeFile outFile bs
