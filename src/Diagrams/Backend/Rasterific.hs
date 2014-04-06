@@ -70,20 +70,13 @@
 -- myDiagram@.
 --
 -------------------------------------------------------------------------------
--- XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
---
--- To do:
---  Waiting for Rasterific:
---    Images
---
--- XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
--------------------------------------------------------------------------------
 module Diagrams.Backend.Rasterific
   ( Rasterific(..)
   , B -- rendering token
   , Options(..)
 
-  , JPimage(..)
+  , ImageEmb(..)
+  , imageEmb
 
   , renderRasterific
   , size
@@ -95,11 +88,9 @@ module Diagrams.Backend.Rasterific
 import           Diagrams.Core.Compile
 import           Diagrams.Core.Transform
 
-
 import           Diagrams.Prelude            hiding (Image, opacity, view)
 import           Diagrams.TwoD.Adjust        (adjustDia2D)
---import qualified Diagrams.TwoD.Image         as D
-import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule)
+import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule, isInsideEvenOdd)
 import           Diagrams.TwoD.Size          (sizePair)
 import           Diagrams.TwoD.Text          hiding (Font)
 
@@ -131,11 +122,6 @@ import           System.FilePath             (takeExtension)
 import           System.IO.Unsafe            (unsafePerformIO)
 import           Paths_diagrams_rasterific   (getDataFileName)
 
-------- Debugging --------------------------------------------------------------
---import Debug.Trace
-
---traceShow' :: Show a => a -> a
---traceShow' x = traceShow x x
 --------------------------------------------------------------------------------
 -- | This data declaration is simply used as a token to distinguish
 --   the Rasterific backend: (1) when calling functions where the type
@@ -393,24 +379,30 @@ instance Renderable Text Rasterific where
         p = rasterificTransf ((moveOriginBy (r2 (refX, refY)) mempty) <> tr) (R.V2 0 0)
     liftR (R.withTexture fColor $ R.printTextAt fnt fs' p str)
 
-data JPimage = JPimage { _imgData     :: ByteString
-                       , _jpImgSize   :: SizeSpec2D
-                       , _jpImgTransf :: T2
+-------------------------------------------------------------------------------
+-- Images ---------------------------------------------------------------------
+-- This does not work correctly yet and will eventually be based on a new API
+-- for images that will be in TwoD.Image, not here.
+-- For now I just want to show that images can work. The scaling
+-- and positioning is not handled yet either.
+data ImageEmb = ImageEmb { _imgData     :: ByteString
+                         , _embImgSize   :: SizeSpec2D
+                         , _embImgTransf :: T2
                        }
   deriving Typeable
 
-makeLenses ''JPimage
+makeLenses ''ImageEmb
 
-type instance V JPimage = R2
+type instance V ImageEmb = R2
 
-instance Transformable JPimage where
-  transform t1 (JPimage iD sz t2) = JPimage iD sz (t1 <> t2)
+instance Transformable ImageEmb where
+  transform t1 (ImageEmb iD sz t2) = ImageEmb iD sz (t1 <> t2)
 
-instance HasOrigin JPimage where
+instance HasOrigin ImageEmb where
   moveOriginTo p = translate (origin .-. p)
 
-instance Renderable JPimage Rasterific where
-  render _ (JPimage iD sz tr) = R . liftR $ R.drawImageAtSize img 0 p w h
+instance Renderable ImageEmb Rasterific where
+  render _ (ImageEmb iD sz tr) = R . liftR $ R.drawImageAtSize img 0 p (w * 96) (h * 96)
     where
       dImg = decodeImage iD
       img = case dImg of
@@ -421,6 +413,17 @@ instance Renderable JPimage Rasterific where
             _            -> error "Invalid image type"
       R.V2 w h = uncurry v2 $ sizePair sz
       p = rasterificTransf tr (R.V2 0 0)
+
+imageEmb :: (Renderable ImageEmb b) => ByteString -> Double -> Double -> Diagram b R2
+imageEmb iD w h = mkQD (Prim (ImageEmb iD (Dims w h) mempty))
+                      (getEnvelope r)
+                      (getTrace r)
+                      mempty
+                      (Query $ \p -> Any (isInsideEvenOdd p r))
+  where r :: Path R2
+        r = rect w h
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 
 writeJpeg :: Word8 -> FilePath -> Result Rasterific R2 -> IO ()
 writeJpeg quality outFile img = L.writeFile outFile bs
