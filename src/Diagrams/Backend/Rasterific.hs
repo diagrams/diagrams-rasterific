@@ -70,35 +70,29 @@
 -- myDiagram@.
 --
 -------------------------------------------------------------------------------
--- XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
---
--- To do:
---  Waiting for Rasterific:
---    Images
---    Fill Rules
---    Dash offset
---
--- XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
--------------------------------------------------------------------------------
 module Diagrams.Backend.Rasterific
   ( Rasterific(..)
   , B -- rendering token
   , Options(..)
 
+  , ImageEmb(..)
+  , imageEmb
+  , embImgSize, embImgTransf, imgData
+
   , renderRasterific
-  , rasterificSizeSpec
-  , rasterificBypassAdjust
+  , size
 
   , writeJpeg
 
   ) where
 
-import           Diagrams.Core.Compile       (RNode (..), RTree, toRTree)
+import           Diagrams.Core.Compile
 import           Diagrams.Core.Transform
+
 import           Diagrams.Prelude            hiding (Image, opacity, view)
-import           Diagrams.TwoD.Adjust        (adjustDiaSize2D,
-                                              setDefault2DAttributes)
-import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule)
+import           Diagrams.TwoD.Adjust        (adjustDia2D)
+import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule, isInsideEvenOdd)
+import           Diagrams.TwoD.Size          (sizePair)
 import           Diagrams.TwoD.Text          hiding (Font)
 
 import           Codec.Picture
@@ -117,6 +111,7 @@ import           Control.Monad.Trans         (lift)
 
 
 import qualified Data.ByteString.Lazy as L   (writeFile)
+import           Data.ByteString             (ByteString)
 import           Data.Default.Class
 import qualified Data.Foldable               as F
 import           Data.Maybe                  (fromMaybe, isJust)
@@ -128,11 +123,6 @@ import           System.FilePath             (takeExtension)
 import           System.IO.Unsafe            (unsafePerformIO)
 import           Paths_diagrams_rasterific   (getDataFileName)
 
-------- Debugging --------------------------------------------------------------
---import Debug.Trace
-
---traceShow' :: Show a => a -> a
---traceShow' x = traceShow x x
 --------------------------------------------------------------------------------
 -- | This data declaration is simply used as a token to distinguish
 --   the Rasterific backend: (1) when calling functions where the type
@@ -174,51 +164,35 @@ instance Backend Rasterific R2 where
   data Render  Rasterific R2 = R (RenderM ())
   type Result  Rasterific R2 = Image PixelRGBA8
   data Options Rasterific R2 = RasterificOptions
-          { _rasterificSizeSpec      :: SizeSpec2D -- ^ The requested size of the output
-          , _rasterificBypassAdjust  :: Bool       -- ^ Should the 'adjustDia' step be bypassed during rendering?
+          { _size      :: SizeSpec2D -- ^ The requested size of the output
           }
     deriving (Show)
 
-  doRender _ (RasterificOptions size _) (R r) =
-    R.renderDrawing (round w) (round h) bgColor r'
+  renderRTree _ opts t =
+    R.renderDrawing (round w) (round h) bgColor r
     where
-      r' = runRenderM r
-      -- Everything except Dims is arbitrary. The backend
-      -- should have first run 'adjustDia' to update the
-      -- final size of the diagram with explicit dimensions,
-      -- so normally we would only expect to get Dims anyway.
-      (w,h) = case size of
-                Width w'   -> (w',w')
-                Height h'  -> (h',h')
-                Dims w' h' -> (w',h')
-                Absolute   -> (100,100)
+      r = runRenderM . runR . toRender $ t
+      (w,h) = sizePair (opts^.size)
       bgColor = PixelRGBA8 255 255 255 0
 
-  renderData _ =
-      renderRTree
-    . Node (RStyle (mempty # recommendFillColor (transparent :: AlphaColour Double)))
-    . (:[])
-    . splitFills. toRTree
+  adjustDia c opts d = adjustDia2D size c opts (d # reflectY # fontSizeO 12)
 
-  -- XXX fonsSize set to 12 intead of 1.
-  adjustDia c opts d = if _rasterificBypassAdjust opts
-                         then (opts, d # setDefault2DAttributes)
-                         else adjustDia2D _rasterificSizeSpec
-                                          setRasterificSizeSpec
-                                          c opts (d # reflectY  # fontSize 12)
-    where setRasterificSizeSpec sz o = o { _rasterificSizeSpec = sz }
-
--- XXX
--- Frozen nodes will be eliminated once units is merged so we don't
--- bother with them. Instead we temporarily use a custom adjustDia2D with
--- no freeze. This means that line widths will be wrong.
-adjustDia2D :: Monoid' m
-            => (Options b R2 -> SizeSpec2D)
-            -> (SizeSpec2D -> Options b R2 -> Options b R2)
-            -> b -> Options b R2 -> QDiagram b R2 m
-            -> (Options b R2, QDiagram b R2 m)
-adjustDia2D getSize setSize b opts d
-  = adjustDiaSize2D getSize setSize b opts (d # setDefault2DAttributes)
+toRender :: RTree Rasterific R2 a -> Render Rasterific R2
+toRender = fromRTree
+  . Node (RStyle (mempty # recommendFillColor (transparent :: AlphaColour Double)))
+  . (:[])
+  . splitFills
+    where
+      fromRTree (Node (RPrim p) _) = render Rasterific p
+      fromRTree (Node (RStyle sty) rs) = R $ do
+        save
+        accumStyle %= (<> sty)
+        aStyle <- use accumStyle
+        let R r = F.foldMap fromRTree rs
+            m = evalStateStackT r (RasterificState aStyle)
+        clip sty m
+        restore
+      fromRTree (Node _ rs) = F.foldMap fromRTree rs
 
 runR :: Render Rasterific R2 -> RenderM ()
 runR (R r) = r
@@ -227,31 +201,17 @@ instance Monoid (Render Rasterific R2) where
   mempty  = R $ return ()
   (R rd1) `mappend` (R rd2) = R (rd1 >> rd2)
 
-renderRTree :: RTree Rasterific R2 a -> Render Rasterific R2
-renderRTree (Node (RPrim accTr p) _) = render Rasterific (transform accTr p)
-renderRTree (Node (RStyle sty) ts) = R $ do
-  save
-  accumStyle %= (<> sty)
-  aStyle <- use accumStyle
-  let R r = F.foldMap renderRTree ts
-      m = evalStateStackT r (RasterificState aStyle)
-  clip sty m
-  restore
-renderRTree (Node _ ts) = F.foldMap renderRTree ts
-
-rasterificSizeSpec :: Lens' (Options Rasterific R2) SizeSpec2D
-rasterificSizeSpec = lens (\(RasterificOptions {_rasterificSizeSpec = s}) -> s)
-                     (\o s -> o {_rasterificSizeSpec = s})
-
-rasterificBypassAdjust :: Lens' (Options Rasterific R2) Bool
-rasterificBypassAdjust = lens (\(RasterificOptions {_rasterificBypassAdjust = b}) -> b)
-                     (\o b -> o {_rasterificBypassAdjust = b})
+size :: Lens' (Options Rasterific R2) SizeSpec2D
+size = lens (\(RasterificOptions {_size = s}) -> s)
+                     (\o s -> o {_size = s})
 
 rasterificStrokeStyle :: Style v
                      -> (Float, R.Join, (R.Cap, R.Cap), Maybe (R.DashPattern, Float))
 rasterificStrokeStyle s = (strokeWidth, strokeJoin, strokeCaps, strokeDash)
   where
-    strokeWidth = double2Float $ fromMaybe 0.01 (getLineWidth <$> getAttr s)
+    strokeWidth = double2Float $ case getLineWidth <$> getAttr s of
+                      Just o ->  fromOutput o
+                      _               ->  1
     strokeJoin = fromMaybe (R.JoinMiter 0) (fromLineJoin . getLineJoin <$> getAttr s)
     strokeCaps = (strokeCap, strokeCap)
     strokeCap = fromMaybe (R.CapStraight 0) (fromLineCap . getLineCap <$> getAttr s)
@@ -268,7 +228,10 @@ fromLineJoin LineJoinRound = R.JoinRound
 fromLineJoin LineJoinBevel = R.JoinMiter 1
 
 fromDashing :: Dashing -> (R.DashPattern, Float)
-fromDashing (Dashing ds d) = (map double2Float ds, double2Float d)
+fromDashing (Dashing ds d) = (map double2Float ds', double2Float d')
+  where
+    ds' = map fromOutput ds
+    d' = fromOutput d
 
 fromFillRule :: FillRule -> R.FillMethod
 fromFillRule EvenOdd = R.FillEvenOdd
@@ -363,7 +326,7 @@ instance Renderable (Segment Closed R2) Rasterific where
 instance Renderable (Trail R2) Rasterific where
   render b = render b . pathFromTrail
 
--- read only of static date (safe)
+-- read only of static data (safe)
 ro :: FilePath -> FilePath
 ro = unsafePerformIO . getDataFileName
 
@@ -402,7 +365,7 @@ textBox f ps str = (float2Double w, float2Double h)
 
 instance Renderable Text Rasterific where
   render _ (Text tr al str) = R $ do
-    fs <- fromMaybe 12 <$> getStyleAttrib getFontSize
+    fs <- fromMaybe 12 <$> getStyleAttrib (fromOutput . getFontSize)
     slant <- fromMaybe FontSlantNormal <$> getStyleAttrib getFontSlant
     fw <- fromMaybe FontWeightNormal <$> getStyleAttrib getFontWeight
     f <- getStyleAttrib (toAlphaColour . getFillColor)
@@ -416,6 +379,52 @@ instance Renderable Text Rasterific where
           BoxAlignedText xt yt -> (x * xt, (1 - yt) * y)
         p = rasterificTransf ((moveOriginBy (r2 (refX, refY)) mempty) <> tr) (R.V2 0 0)
     liftR (R.withTexture fColor $ R.printTextAt fnt fs' p str)
+
+-------------------------------------------------------------------------------
+-- Images ---------------------------------------------------------------------
+-- This does not work correctly yet and will eventually be based on a new API
+-- for images that will be in TwoD.Image, not here.
+-- For now I just want to show that images can work. The scaling
+-- and positioning is not handled yet either.
+data ImageEmb = ImageEmb { _imgData     :: ByteString
+                         , _embImgSize   :: SizeSpec2D
+                         , _embImgTransf :: T2
+                       }
+  deriving Typeable
+
+makeLenses ''ImageEmb
+
+type instance V ImageEmb = R2
+
+instance Transformable ImageEmb where
+  transform t1 (ImageEmb iD sz t2) = ImageEmb iD sz (t1 <> t2)
+
+instance HasOrigin ImageEmb where
+  moveOriginTo p = translate (origin .-. p)
+
+instance Renderable ImageEmb Rasterific where
+  render _ (ImageEmb iD sz tr) = R . liftR $ R.drawImageAtSize img 0 p (w * 96) (h * 96)
+    where
+      dImg = decodeImage iD
+      img = case dImg of
+        Left _ -> error "Cannot decode image data"
+        Right dImg' ->
+          case dImg' of
+            ImageRGBA8 i -> i
+            _            -> error "Invalid image type"
+      R.V2 w h = uncurry v2 $ sizePair sz
+      p = rasterificTransf tr (R.V2 0 0)
+
+imageEmb :: (Renderable ImageEmb b) => ByteString -> Double -> Double -> Diagram b R2
+imageEmb iD w h = mkQD (Prim (ImageEmb iD (Dims w h) mempty))
+                      (getEnvelope r)
+                      (getTrace r)
+                      mempty
+                      (Query $ \p -> Any (isInsideEvenOdd p r))
+  where r :: Path R2
+        r = rect w h
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 
 writeJpeg :: Word8 -> FilePath -> Result Rasterific R2 -> IO ()
 writeJpeg quality outFile img = L.writeFile outFile bs
@@ -431,5 +440,5 @@ renderRasterific outFile sizeSpec quality d = writer outFile img
               ".bmp" -> writeBitmap
               ".jpg" -> writeJpeg q
               _      -> writePng
-    img = renderDia Rasterific (RasterificOptions sizeSpec False) d
+    img = renderDia Rasterific (RasterificOptions sizeSpec) d
     q = max quality 100

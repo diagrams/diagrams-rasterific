@@ -71,47 +71,51 @@ module Diagrams.Backend.Rasterific.CmdLine
         -- * GIF support
        , GifOpts(..)
 
+        -- * Juicy Pixel image support
+       , ImageEmb(..)
+       , imageEmb
+
          -- * Backend tokens
        , Rasterific
        , B
        ) where
 
-import           Diagrams.Prelude             hiding (width, height, interval
-                                             ,Image, option, (<>))
+import           Diagrams.Prelude              hiding (width, height, interval
+                                              ,Image, option, (<>))
 import           Diagrams.Backend.Rasterific
 import           Diagrams.Backend.CmdLine
 
 import           Codec.Picture
-import           Codec.Picture.Types       (dropTransparency)
-import           Codec.Picture.ColorQuant  (defaultPaletteOptions)
+import           Codec.Picture.Types          (dropTransparency)
+import           Codec.Picture.ColorQuant     (defaultPaletteOptions)
 
-import qualified Data.ByteString.Lazy as L (ByteString, writeFile)
+import qualified Data.ByteString.Lazy as L    (ByteString, writeFile)
 
 import           Options.Applicative
-import           Control.Lens              ((^.), Lens', makeLenses)
+import           Control.Lens                 ((^.), Lens', makeLenses)
 
 import           Data.List.Split
 
 #ifdef CMDLINELOOP
 
-import           Data.Maybe               (fromMaybe)
-import           Control.Monad            (when, mplus)
-import           Control.Lens             (_1)
+import           Data.Maybe                  (fromMaybe)
+import           Control.Monad               (when, mplus)
+import           Control.Lens                (_1)
 
-import           System.Environment       (getArgs, getProgName)
-import           System.Directory         (getModificationTime)
-import           System.Process           (runProcess, waitForProcess)
-import           System.IO                (openFile, hClose, IOMode(..)
-                                          ,hSetBuffering, BufferMode(..)
-                                          ,stdout)
-import           System.Exit              (ExitCode(..))
-import           Control.Concurrent       (threadDelay)
-import           Control.Exception        (catch, SomeException(..), bracket)
-import           System.Posix.Process     (executeFile)
+import           System.Environment          (getArgs, getProgName)
+import           System.Directory            (getModificationTime)
+import           System.Process              (runProcess, waitForProcess)
+import           System.IO                   (openFile, hClose, IOMode(..)
+                                             ,hSetBuffering, BufferMode(..)
+                                             ,stdout)
+import           System.Exit                 (ExitCode(..))
+import           Control.Concurrent          (threadDelay)
+import           Control.Exception           (catch, SomeException(..), bracket)
+import           System.Posix.Process        (executeFile)
 
 #if MIN_VERSION_directory(1,2,0)
 
-import           Data.Time.Clock          (UTCTime,getCurrentTime)
+import           Data.Time.Clock             (UTCTime,getCurrentTime)
 
 type ModuleTime = UTCTime
 getModuleTime :: IO  ModuleTime
@@ -119,7 +123,7 @@ getModuleTime = getCurrentTime
 
 #else
 
-import          System.Time               (ClockTime, getClockTime)
+import          System.Time                  (ClockTime, getClockTime)
 
 type ModuleTime = ClockTime
 getModuleTime :: IO  ModuleTime
@@ -165,7 +169,6 @@ chooseRender opts d =
                              (fromIntegral <$> opts ^. width )
                              (fromIntegral <$> opts ^. height)
                           )
-                          False
                         )
                         d
            case last ps of
@@ -337,9 +340,9 @@ gifRender (dOpts, gOpts) lst =
                                 Just n  -> LoopingRepeat (fromIntegral n)
                dias = map fst lst
                delays = map snd lst
-               size = mkSizeSpec (fromIntegral <$> dOpts^.width)
+               sizeSpec = mkSizeSpec (fromIntegral <$> dOpts^.width)
                                  (fromIntegral <$> dOpts^.height)
-               opts = RasterificOptions size False
+               opts = RasterificOptions sizeSpec
                imageRGB8s = map (pixelMap dropTransparency
                                . renderDia Rasterific opts) dias
                result = writeGifAnimation' (dOpts^.output) delays
