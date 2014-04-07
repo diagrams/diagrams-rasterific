@@ -77,6 +77,7 @@ module Diagrams.Backend.Rasterific
 
   , ImageEmb(..)
   , imageEmb
+  , embImgSize, embImgTransf, imgData
 
   , renderRasterific
   , size
