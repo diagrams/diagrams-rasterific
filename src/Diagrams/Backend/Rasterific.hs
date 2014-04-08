@@ -88,7 +88,7 @@ import           Diagrams.Core.Transform
 import           Diagrams.Prelude            hiding (opacity, view)
 import           Diagrams.TwoD.Adjust        (adjustDia2D)
 import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule)
-import           Diagrams.TwoD.Size          (sizePair)
+import           Diagrams.TwoD.Size          (sizePair, requiredScaleT)
 import           Diagrams.TwoD.Text          hiding (Font)
 
 import           Codec.Picture
@@ -98,6 +98,7 @@ import           GHC.Float                   (double2Float, float2Double)
 
 import qualified Graphics.Rasterific         as R
 import           Graphics.Rasterific.Texture (uniformTexture)
+import qualified Graphics.Rasterific.Transformations as R
 import           Graphics.Text.TrueType      (loadFontFile, Font, stringBoundingBox)
 
 import           Control.Lens                hiding (transform, ( # ))
@@ -255,11 +256,24 @@ p2v2 p = uncurry v2 $ unp2 p
 r2v2 :: R2 -> R.Point
 r2v2 r = uncurry v2 $ unr2 r
 
-rasterificTransf :: T2 -> R.Point -> R.Point
-rasterificTransf tr p =  p2v2 $ transform tr p'
+rasterificPtTransf :: T2 -> R.Point -> R.Point
+rasterificPtTransf tr p =  p2v2 $ transform tr p'
   where
     p' = mkP2 (float2Double x) (float2Double y)
     R.V2 x y = p
+
+rasterificMatTransf :: T2 -> R.Transformation
+rasterificMatTransf tr = R.Transformation a c e b d f
+  where
+    (a,b,c,d,e,f) = map6 double2Float (getMatrix tr)
+    map6 g (x1, x2, x3, x4, x5, x6) = (g x1, g x2, g x3, g x4, g x5, g x6)
+
+getMatrix :: Transformation R2 -> (Double, Double, Double, Double, Double, Double)
+getMatrix t = (a1,a2,b1,b2,c1,c2)
+ where
+  (unr2 -> (a1,a2)) = apply t unitX
+  (unr2 -> (b1,b2)) = apply t unitY
+  (unr2 -> (c1,c2)) = transl t
 
 -- Note: Using view patterns confuses ghc to think there are missing patterns,
 -- so we avoid them here.
@@ -372,21 +386,27 @@ instance Renderable Text Rasterific where
         (refX, refY) = case al of
           BaselineText -> (0, y)
           BoxAlignedText xt yt -> (x * xt, (1 - yt) * y)
-        p = rasterificTransf ((moveOriginBy (r2 (refX, refY)) mempty) <> tr) (R.V2 0 0)
+        p = rasterificPtTransf ((moveOriginBy (r2 (refX, refY)) mempty) <> tr) (R.V2 0 0)
     liftR (R.withTexture fColor $ R.printTextAt fnt fs' p str)
 
 instance Renderable (DImage Embedded) Rasterific where
-  render _ (DImage iD w h tr) = R . liftR $ R.drawImageAtSize img 0 p w' (-h')
+  render _ (DImage iD w h tr) = R $ liftR
+                               (R.withTransformation (rasterificMatTransf t)
+                               (R.drawImage img 0 p))
     where
       ImageRaster dImg = iD
       img = case dImg of
               ImageRGBA8 i -> i
               _            -> error "Invalid image type"
+      wImg = imageWidth img
+      hImg = imageHeight img
+      sz = Dims (fromIntegral w) (fromIntegral h)
+      t = tr <> reflectionY <> requiredScaleT sz (fromIntegral wImg, fromIntegral hImg)
       tr' = dropTransl tr
-      R.V2 w' h' = rasterificTransf tr' (v2 (fromIntegral w) (fromIntegral h))
-      p = rasterificTransf ((moveOriginBy
-                           (r2 ((float2Double w' / 2), (-float2Double h' / 2))) mempty)
-                         <> tr) (R.V2 (0) 0)
+      R.V2 w' h' = rasterificPtTransf tr' (v2 (fromIntegral w) (fromIntegral h))
+      p = rasterificPtTransf ((moveOriginBy
+                              (r2 ((fromIntegral wImg / 2), (fromIntegral hImg / 2)))
+                              mempty)) (R.V2 0 0)
 
 writeJpeg :: Word8 -> FilePath -> Result Rasterific R2 -> IO ()
 writeJpeg quality outFile img = L.writeFile outFile bs
