@@ -378,12 +378,6 @@ instance Renderable Text Rasterific where
         p = rasterificTransf ((moveOriginBy (r2 (refX, refY)) mempty) <> tr) (R.V2 0 0)
     liftR (R.withTexture fColor $ R.printTextAt fnt fs' p str)
 
--------------------------------------------------------------------------------
--- Images ---------------------------------------------------------------------
--- This does not work correctly yet and will eventually be based on a new API
--- for images that will be in TwoD.Image, not here.
--- For now I just want to show that images can work. The scaling
--- and positioning is not handled yet either.
 instance Renderable (DImage Embedded) Rasterific where
   render _ (DImage iD w h tr) = R . liftR $ R.drawImageAtSize img 0 p w' (-h')
     where
@@ -393,7 +387,9 @@ instance Renderable (DImage Embedded) Rasterific where
               _            -> error "Invalid image type"
       tr' = dropTransl tr
       R.V2 w' h' = rasterificTransf tr' (v2 (fromIntegral w) (fromIntegral h))
-      p = rasterificTransf ((moveOriginBy (r2 ((float2Double w' / 2), (-float2Double h' / 2))) mempty) <> tr) (R.V2 (0) 0)
+      p = rasterificTransf ((moveOriginBy
+                           (r2 ((float2Double w' / 2), (-float2Double h' / 2))) mempty)
+                         <> tr) (R.V2 (0) 0)
 -------------------------------------------------------------------------------
 -------------------------------------------------------------------------------
 
