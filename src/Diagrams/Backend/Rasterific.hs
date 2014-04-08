@@ -390,8 +390,6 @@ instance Renderable (DImage Embedded) Rasterific where
       p = rasterificTransf ((moveOriginBy
                            (r2 ((float2Double w' / 2), (-float2Double h' / 2))) mempty)
                          <> tr) (R.V2 (0) 0)
--------------------------------------------------------------------------------
--------------------------------------------------------------------------------
 
 writeJpeg :: Word8 -> FilePath -> Result Rasterific R2 -> IO ()
 writeJpeg quality outFile img = L.writeFile outFile bs
