@@ -402,8 +402,6 @@ instance Renderable (DImage Embedded) Rasterific where
       hImg = imageHeight img
       sz = Dims (fromIntegral w) (fromIntegral h)
       t = tr <> reflectionY <> requiredScaleT sz (fromIntegral wImg, fromIntegral hImg)
-      tr' = dropTransl tr
-      R.V2 w' h' = rasterificPtTransf tr' (v2 (fromIntegral w) (fromIntegral h))
       p = rasterificPtTransf ((moveOriginBy
                               (r2 ((fromIntegral wImg / 2), (fromIntegral hImg / 2)))
                               mempty)) (R.V2 0 0)
