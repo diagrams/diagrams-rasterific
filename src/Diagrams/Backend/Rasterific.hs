@@ -75,10 +75,6 @@ module Diagrams.Backend.Rasterific
   , B -- rendering token
   , Options(..)
 
-  , ImageEmb(..)
-  , imageEmb
-  , embImgSize, embImgTransf, imgData
-
   , renderRasterific
   , size
 
@@ -91,6 +87,7 @@ import           Diagrams.Core.Transform
 
 import           Diagrams.Prelude            hiding (Image, opacity, view)
 import           Diagrams.TwoD.Adjust        (adjustDia2D)
+import           Diagrams.TwoD.Image
 import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule, isInsideEvenOdd)
 import           Diagrams.TwoD.Size          (sizePair)
 import           Diagrams.TwoD.Text          hiding (Font)
@@ -108,6 +105,7 @@ import           Control.Lens                hiding (transform, ( # ))
 import           Control.Monad               (when)
 import           Control.Monad.StateStack
 import           Control.Monad.Trans         (lift)
+import           Control.Arrow               ((&&&))
 
 
 import qualified Data.ByteString.Lazy as L   (writeFile)
@@ -386,43 +384,16 @@ instance Renderable Text Rasterific where
 -- for images that will be in TwoD.Image, not here.
 -- For now I just want to show that images can work. The scaling
 -- and positioning is not handled yet either.
-data ImageEmb = ImageEmb { _imgData     :: ByteString
-                         , _embImgSize   :: SizeSpec2D
-                         , _embImgTransf :: T2
-                       }
-  deriving Typeable
-
-makeLenses ''ImageEmb
-
-type instance V ImageEmb = R2
-
-instance Transformable ImageEmb where
-  transform t1 (ImageEmb iD sz t2) = ImageEmb iD sz (t1 <> t2)
-
-instance HasOrigin ImageEmb where
-  moveOriginTo p = translate (origin .-. p)
-
-instance Renderable ImageEmb Rasterific where
-  render _ (ImageEmb iD sz tr) = R . liftR $ R.drawImageAtSize img 0 p (w * 96) (h * 96)
+instance Renderable (DImage Embedded) Rasterific where
+  render _ (DImage iD w h tr) = R . liftR $ R.drawImageAtSize img 0 p w' (-h')
     where
-      dImg = decodeImage iD
+      ImageRaster dImg = iD
       img = case dImg of
-        Left _ -> error "Cannot decode image data"
-        Right dImg' ->
-          case dImg' of
-            ImageRGBA8 i -> i
-            _            -> error "Invalid image type"
-      R.V2 w h = uncurry v2 $ sizePair sz
-      p = rasterificTransf tr (R.V2 0 0)
-
-imageEmb :: (Renderable ImageEmb b) => ByteString -> Double -> Double -> Diagram b R2
-imageEmb iD w h = mkQD (Prim (ImageEmb iD (Dims w h) mempty))
-                      (getEnvelope r)
-                      (getTrace r)
-                      mempty
-                      (Query $ \p -> Any (isInsideEvenOdd p r))
-  where r :: Path R2
-        r = rect w h
+              ImageRGBA8 i -> i
+              _            -> error "Invalid image type"
+      tr' = dropTransl tr
+      R.V2 w' h' = rasterificTransf tr' (v2 (fromIntegral w) (fromIntegral h))
+      p = rasterificTransf ((moveOriginBy (r2 ((float2Double w' / 2), (-float2Double h' / 2))) mempty) <> tr) (R.V2 (0) 0)
 -------------------------------------------------------------------------------
 -------------------------------------------------------------------------------
 
