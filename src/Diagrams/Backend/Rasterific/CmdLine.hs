@@ -77,7 +77,7 @@ module Diagrams.Backend.Rasterific.CmdLine
        ) where
 
 import           Diagrams.Prelude              hiding (width, height, interval
-                                              ,Image, option, (<>))
+                                              ,option, (<>))
 import           Diagrams.Backend.Rasterific
 import           Diagrams.Backend.CmdLine
 

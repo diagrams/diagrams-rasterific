@@ -85,10 +85,9 @@ module Diagrams.Backend.Rasterific
 import           Diagrams.Core.Compile
 import           Diagrams.Core.Transform
 
-import           Diagrams.Prelude            hiding (Image, opacity, view)
+import           Diagrams.Prelude            hiding (opacity, view)
 import           Diagrams.TwoD.Adjust        (adjustDia2D)
-import           Diagrams.TwoD.Image
-import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule, isInsideEvenOdd)
+import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule)
 import           Diagrams.TwoD.Size          (sizePair)
 import           Diagrams.TwoD.Text          hiding (Font)
 
@@ -105,11 +104,9 @@ import           Control.Lens                hiding (transform, ( # ))
 import           Control.Monad               (when)
 import           Control.Monad.StateStack
 import           Control.Monad.Trans         (lift)
-import           Control.Arrow               ((&&&))
 
 
 import qualified Data.ByteString.Lazy as L   (writeFile)
-import           Data.ByteString             (ByteString)
 import           Data.Default.Class
 import qualified Data.Foldable               as F
 import           Data.Maybe                  (fromMaybe, isJust)
@@ -244,7 +241,7 @@ sourceColor Nothing  _ = PixelRGBA8 0 0 0 0
 sourceColor (Just c) o = PixelRGBA8 r g b a
   where
     (r, g, b, a) = (int r', int g', int b', int (o * a'))
-    (r',g',b', a') = colorToSRGBA c
+    (r', g', b', a') = colorToSRGBA c
     int x = round (255 * x)
 
 v2 :: Double -> Double -> R.Point
