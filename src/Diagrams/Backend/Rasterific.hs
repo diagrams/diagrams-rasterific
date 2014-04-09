@@ -75,10 +75,6 @@ module Diagrams.Backend.Rasterific
   , B -- rendering token
   , Options(..)
 
-  , ImageEmb(..)
-  , imageEmb
-  , embImgSize, embImgTransf, imgData
-
   , renderRasterific
   , size
 
@@ -89,9 +85,9 @@ module Diagrams.Backend.Rasterific
 import           Diagrams.Core.Compile
 import           Diagrams.Core.Transform
 
-import           Diagrams.Prelude            hiding (Image, opacity, view)
+import           Diagrams.Prelude            hiding (opacity, view)
 import           Diagrams.TwoD.Adjust        (adjustDia2D)
-import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule, isInsideEvenOdd)
+import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule)
 import           Diagrams.TwoD.Size          (sizePair)
 import           Diagrams.TwoD.Text          hiding (Font)
 
@@ -102,6 +98,7 @@ import           GHC.Float                   (double2Float, float2Double)
 
 import qualified Graphics.Rasterific         as R
 import           Graphics.Rasterific.Texture (uniformTexture)
+import qualified Graphics.Rasterific.Transformations as R
 import           Graphics.Text.TrueType      (loadFontFile, Font, stringBoundingBox)
 
 import           Control.Lens                hiding (transform, ( # ))
@@ -111,7 +108,6 @@ import           Control.Monad.Trans         (lift)
 
 
 import qualified Data.ByteString.Lazy as L   (writeFile)
-import           Data.ByteString             (ByteString)
 import           Data.Default.Class
 import qualified Data.Foldable               as F
 import           Data.Maybe                  (fromMaybe, isJust)
@@ -246,7 +242,7 @@ sourceColor Nothing  _ = PixelRGBA8 0 0 0 0
 sourceColor (Just c) o = PixelRGBA8 r g b a
   where
     (r, g, b, a) = (int r', int g', int b', int (o * a'))
-    (r',g',b', a') = colorToSRGBA c
+    (r', g', b', a') = colorToSRGBA c
     int x = round (255 * x)
 
 v2 :: Double -> Double -> R.Point
@@ -260,11 +256,24 @@ p2v2 p = uncurry v2 $ unp2 p
 r2v2 :: R2 -> R.Point
 r2v2 r = uncurry v2 $ unr2 r
 
-rasterificTransf :: T2 -> R.Point -> R.Point
-rasterificTransf tr p =  p2v2 $ transform tr p'
+rasterificPtTransf :: T2 -> R.Point -> R.Point
+rasterificPtTransf tr p =  p2v2 $ transform tr p'
   where
     p' = mkP2 (float2Double x) (float2Double y)
     R.V2 x y = p
+
+rasterificMatTransf :: T2 -> R.Transformation
+rasterificMatTransf tr = R.Transformation a c e b d f
+  where
+    (a,b,c,d,e,f) = map6 double2Float (getMatrix tr)
+    map6 g (x1, x2, x3, x4, x5, x6) = (g x1, g x2, g x3, g x4, g x5, g x6)
+
+getMatrix :: Transformation R2 -> (Double, Double, Double, Double, Double, Double)
+getMatrix t = (a1,a2,b1,b2,c1,c2)
+ where
+  (unr2 -> (a1,a2)) = apply t unitX
+  (unr2 -> (b1,b2)) = apply t unitY
+  (unr2 -> (c1,c2)) = transl t
 
 -- Note: Using view patterns confuses ghc to think there are missing patterns,
 -- so we avoid them here.
@@ -377,54 +386,22 @@ instance Renderable Text Rasterific where
         (refX, refY) = case al of
           BaselineText -> (0, y)
           BoxAlignedText xt yt -> (x * xt, (1 - yt) * y)
-        p = rasterificTransf ((moveOriginBy (r2 (refX, refY)) mempty) <> tr) (R.V2 0 0)
+        p = rasterificPtTransf ((moveOriginBy (r2 (refX, refY)) mempty) <> tr) (R.V2 0 0)
     liftR (R.withTexture fColor $ R.printTextAt fnt fs' p str)
 
--------------------------------------------------------------------------------
--- Images ---------------------------------------------------------------------
--- This does not work correctly yet and will eventually be based on a new API
--- for images that will be in TwoD.Image, not here.
--- For now I just want to show that images can work. The scaling
--- and positioning is not handled yet either.
-data ImageEmb = ImageEmb { _imgData     :: ByteString
-                         , _embImgSize   :: SizeSpec2D
-                         , _embImgTransf :: T2
-                       }
-  deriving Typeable
-
-makeLenses ''ImageEmb
-
-type instance V ImageEmb = R2
-
-instance Transformable ImageEmb where
-  transform t1 (ImageEmb iD sz t2) = ImageEmb iD sz (t1 <> t2)
-
-instance HasOrigin ImageEmb where
-  moveOriginTo p = translate (origin .-. p)
-
-instance Renderable ImageEmb Rasterific where
-  render _ (ImageEmb iD sz tr) = R . liftR $ R.drawImageAtSize img 0 p (w * 96) (h * 96)
+instance Renderable (DImage Embedded) Rasterific where
+  render _ (DImage iD w h tr) = R $ liftR
+                               (R.withTransformation
+                               (rasterificMatTransf (tr <> reflectionY))
+                               (R.drawImage img 0 p))
     where
-      dImg = decodeImage iD
+      ImageRaster dImg = iD
       img = case dImg of
-        Left _ -> error "Cannot decode image data"
-        Right dImg' ->
-          case dImg' of
-            ImageRGBA8 i -> i
-            _            -> error "Invalid image type"
-      R.V2 w h = uncurry v2 $ sizePair sz
-      p = rasterificTransf tr (R.V2 0 0)
-
-imageEmb :: (Renderable ImageEmb b) => ByteString -> Double -> Double -> Diagram b R2
-imageEmb iD w h = mkQD (Prim (ImageEmb iD (Dims w h) mempty))
-                      (getEnvelope r)
-                      (getTrace r)
-                      mempty
-                      (Query $ \p -> Any (isInsideEvenOdd p r))
-  where r :: Path R2
-        r = rect w h
--------------------------------------------------------------------------------
--------------------------------------------------------------------------------
+              ImageRGBA8 i -> i
+              _            -> error "Invalid image type"
+      p = rasterificPtTransf ((moveOriginBy
+                              (r2 ((fromIntegral w / 2), (fromIntegral h / 2)))
+                               mempty)) (R.V2 0 0)
 
 writeJpeg :: Word8 -> FilePath -> Result Rasterific R2 -> IO ()
 writeJpeg quality outFile img = L.writeFile outFile bs
