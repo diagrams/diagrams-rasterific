@@ -88,7 +88,7 @@ import           Diagrams.Core.Transform
 import           Diagrams.Prelude            hiding (opacity, view)
 import           Diagrams.TwoD.Adjust        (adjustDia2D)
 import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule)
-import           Diagrams.TwoD.Size          (sizePair, requiredScaleT)
+import           Diagrams.TwoD.Size          (sizePair)
 import           Diagrams.TwoD.Text          hiding (Font)
 
 import           Codec.Picture
@@ -399,10 +399,8 @@ instance Renderable (DImage Embedded) Rasterific where
       img = case dImg of
               ImageRGBA8 i -> i
               _            -> error "Invalid image type"
-      w = fromIntegral . imageWidth $ img
-      h = fromIntegral . imageHeight $ img
       p = rasterificPtTransf ((moveOriginBy
-                              (r2 ((float2Double w / 2), (float2Double h / 2)))
+                              (r2 ((fromIntegral w / 2), (fromIntegral h / 2)))
                                mempty)) (R.V2 0 0)
 
 writeJpeg :: Word8 -> FilePath -> Result Rasterific R2 -> IO ()
