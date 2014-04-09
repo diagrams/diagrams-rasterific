@@ -71,17 +71,13 @@ module Diagrams.Backend.Rasterific.CmdLine
         -- * GIF support
        , GifOpts(..)
 
-        -- * Juicy Pixel image support
-       , ImageEmb(..)
-       , imageEmb
-
          -- * Backend tokens
        , Rasterific
        , B
        ) where
 
 import           Diagrams.Prelude              hiding (width, height, interval
-                                              ,Image, option, (<>))
+                                              ,option, (<>))
 import           Diagrams.Backend.Rasterific
 import           Diagrams.Backend.CmdLine
 
