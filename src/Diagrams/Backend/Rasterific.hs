@@ -391,20 +391,19 @@ instance Renderable Text Rasterific where
 
 instance Renderable (DImage Embedded) Rasterific where
   render _ (DImage iD w h tr) = R $ liftR
-                               (R.withTransformation (rasterificMatTransf t)
+                               (R.withTransformation
+                               (rasterificMatTransf (tr <> reflectionY))
                                (R.drawImage img 0 p))
     where
       ImageRaster dImg = iD
       img = case dImg of
               ImageRGBA8 i -> i
               _            -> error "Invalid image type"
-      wImg = imageWidth img
-      hImg = imageHeight img
-      sz = Dims (fromIntegral w) (fromIntegral h)
-      t = tr <> reflectionY <> requiredScaleT sz (fromIntegral wImg, fromIntegral hImg)
+      w = fromIntegral . imageWidth $ img
+      h = fromIntegral . imageHeight $ img
       p = rasterificPtTransf ((moveOriginBy
-                              (r2 ((fromIntegral wImg / 2), (fromIntegral hImg / 2)))
-                              mempty)) (R.V2 0 0)
+                              (r2 ((float2Double w / 2), (float2Double h / 2)))
+                               mempty)) (R.V2 0 0)
 
 writeJpeg :: Word8 -> FilePath -> Result Rasterific R2 -> IO ()
 writeJpeg quality outFile img = L.writeFile outFile bs
