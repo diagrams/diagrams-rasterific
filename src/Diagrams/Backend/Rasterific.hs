@@ -97,7 +97,9 @@ import           Codec.Picture.Types         (dropTransparency, convertPixel)
 import           GHC.Float                   (double2Float, float2Double)
 
 import qualified Graphics.Rasterific         as R
-import           Graphics.Rasterific.Texture (uniformTexture)
+import           Graphics.Rasterific.Texture (uniformTexture, Gradient(..)
+                                             ,linearGradientTexture ,withSampler
+                                             ,radialGradientWithFocusTexture)
 import qualified Graphics.Rasterific.Transformations as R
 import           Graphics.Text.TrueType      (loadFontFile, Font, stringBoundingBox)
 
@@ -237,13 +239,63 @@ fromFillRule _ = R.FillWinding
 getStyleAttrib :: AttributeClass a => (a -> b) -> RenderM (Maybe b)
 getStyleAttrib f = (fmap f . getAttr) <$> use accumStyle
 
-sourceColor :: Maybe (AlphaColour Double) -> Double -> PixelRGBA8
-sourceColor Nothing  _ = PixelRGBA8 0 0 0 0
-sourceColor (Just c) o = PixelRGBA8 r g b a
+rasterificColor :: SomeColor -> Double -> PixelRGBA8
+rasterificColor c o = PixelRGBA8 r g b a
   where
     (r, g, b, a) = (int r', int g', int b', int (o * a'))
-    (r', g', b', a') = colorToSRGBA c
+    (r', g', b', a') = colorToSRGBA (toAlphaColour c)
     int x = round (255 * x)
+
+rasterificSpreadMethod :: SpreadMethod -> R.SamplerRepeat
+rasterificSpreadMethod GradPad      = R.SamplerPad
+rasterificSpreadMethod GradReflect  = R.SamplerReflect
+rasterificSpreadMethod GradRepeat   = R.SamplerRepeat
+
+rasterificStops :: [GradientStop] -> Gradient PixelRGBA8
+rasterificStops s = map fromStop s
+  where
+    fromStop (GradientStop c v) =
+      (double2Float v, rasterificColor c 1)
+
+rasterificLinearGradient :: LGradient -> R.Texture PixelRGBA8
+rasterificLinearGradient g = withSampler spreadMethod
+                            (linearGradientTexture gradDef p0 p1)
+  where
+    spreadMethod = rasterificSpreadMethod (g^.lGradSpreadMethod)
+    gradDef = rasterificStops (g^.lGradStops)
+    p0 = rasterificPtTransf (g^.lGradTrans) (p2v2 . ctr $ (g^.lGradStart))
+    p1 = rasterificPtTransf (g^.lGradTrans) (p2v2 . ctr $ (g^.lGradEnd))
+    ctr p = ((fst . unp2 $ p) - 0.5) ^& ((snd . unp2 $ p) - 0.5)
+
+
+rasterificRadialGradient :: RGradient -> R.Texture PixelRGBA8
+rasterificRadialGradient g = withSampler spreadMethod
+                             (radialGradientWithFocusTexture gradDef c r f)
+  where
+    spreadMethod = rasterificSpreadMethod (g^.rGradSpreadMethod)
+    c = rasterificPtTransf (g^.rGradTrans) (p2v2 (g^.rGradCenter1))
+    f = rasterificPtTransf (g^.rGradTrans) (p2v2 (g^.rGradCenter0))
+    -- XXX This is a temporary approximation because rasterific
+    -- radii are expressed in absolute units instead of %.
+    r = double2Float $ r1 * avgScale (g^.rGradTrans)
+    gradDef = rasterificStops ss
+
+    -- Adjust the stops so that the gradient begins at the perimeter of
+    -- the inner circle (center0, radius0) and ends at the outer circle.
+    r0 = g^.rGradRadius0
+    r1 = g^.rGradRadius1
+    stopFracs = r0 / r1 : map (\s -> (r0 + (s^.stopFraction) * (r1-r0)) / r1)
+                (g^.rGradStops)
+    gradStops = case g^.rGradStops of
+      []       -> []
+      xs@(x:_) -> x : xs
+    ss = zipWith (\gs sf -> gs & stopFraction .~ sf ) gradStops stopFracs
+
+-- Convert a diagrams @Texture@ and opacity to a rasterific texture.
+rasterificTexture :: Texture -> Double -> R.Texture PixelRGBA8
+rasterificTexture (SC c) o = uniformTexture $ rasterificColor c o
+rasterificTexture (LG g) _ = rasterificLinearGradient g
+rasterificTexture (RG g) _ = rasterificRadialGradient g
 
 v2 :: Double -> Double -> R.Point
 v2 x y = R.V2 x' y'
@@ -309,14 +361,14 @@ mkStroke l j c d  primList =
 
 instance Renderable (Path R2) Rasterific where
   render _ p = R $ do
-    f <- getStyleAttrib (toAlphaColour . getFillColor)
-    s <- getStyleAttrib (toAlphaColour . getLineColor)
+    f <- fromMaybe (SC (SomeColor black)) <$> getStyleAttrib getFillTexture
+    s <- fromMaybe (SC (SomeColor black)) <$> getStyleAttrib getLineTexture
     o <- fromMaybe 1 <$> getStyleAttrib getOpacity
     r <- fromMaybe Winding <$> getStyleAttrib getFillRule
     sty <- use accumStyle
 
-    let fColor = uniformTexture $ sourceColor f o
-        sColor = uniformTexture $ sourceColor s o
+    let fColor = rasterificTexture f o
+        sColor = rasterificTexture s o
         (l, j, c, d) = rasterificStrokeStyle sty
         rule = fromFillRule r
 
@@ -326,7 +378,7 @@ instance Renderable (Path R2) Rasterific where
         -- For filling we need to concatenate them into a flat list.
         prms = concat primList
 
-    when (isJust f) $ liftR (R.withTexture fColor $ R.fillWithMethod rule prms)
+    when (True{-isJust f-}) $ liftR (R.withTexture fColor $ R.fillWithMethod rule prms)
     liftR (R.withTexture sColor $ mkStroke l j c d primList)
 
 instance Renderable (Segment Closed R2) Rasterific where
@@ -377,9 +429,9 @@ instance Renderable Text Rasterific where
     fs <- fromMaybe 12 <$> getStyleAttrib (fromOutput . getFontSize)
     slant <- fromMaybe FontSlantNormal <$> getStyleAttrib getFontSlant
     fw <- fromMaybe FontWeightNormal <$> getStyleAttrib getFontWeight
-    f <- getStyleAttrib (toAlphaColour . getFillColor)
+    f <- fromMaybe (SC (SomeColor black)) <$> getStyleAttrib getFillTexture
     o <- fromMaybe 1 <$> getStyleAttrib getOpacity
-    let fColor = uniformTexture $ sourceColor f o
+    let fColor = rasterificTexture f o
         fs' = round fs
         fnt = fromFontStyle slant fw
         (x, y) = textBox fnt fs' str
