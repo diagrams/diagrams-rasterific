@@ -361,7 +361,7 @@ mkStroke l j c d  primList =
 
 instance Renderable (Path R2) Rasterific where
   render _ p = R $ do
-    f <- fromMaybe (SC (SomeColor black)) <$> getStyleAttrib getFillTexture
+    f <- fromMaybe (SC (SomeColor transparent)) <$> getStyleAttrib getFillTexture
     s <- fromMaybe (SC (SomeColor black)) <$> getStyleAttrib getLineTexture
     o <- fromMaybe 1 <$> getStyleAttrib getOpacity
     r <- fromMaybe Winding <$> getStyleAttrib getFillRule
@@ -378,7 +378,7 @@ instance Renderable (Path R2) Rasterific where
         -- For filling we need to concatenate them into a flat list.
         prms = concat primList
 
-    when (True{-isJust f-}) $ liftR (R.withTexture fColor $ R.fillWithMethod rule prms)
+    liftR (R.withTexture fColor $ R.fillWithMethod rule prms)
     liftR (R.withTexture sColor $ mkStroke l j c d primList)
 
 instance Renderable (Segment Closed R2) Rasterific where
