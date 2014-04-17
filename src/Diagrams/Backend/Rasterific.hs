@@ -263,9 +263,8 @@ rasterificLinearGradient g = withSampler spreadMethod
   where
     spreadMethod = rasterificSpreadMethod (g^.lGradSpreadMethod)
     gradDef = rasterificStops (g^.lGradStops)
-    p0 = rasterificPtTransf (g^.lGradTrans) (p2v2 . ctr $ (g^.lGradStart))
-    p1 = rasterificPtTransf (g^.lGradTrans) (p2v2 . ctr $ (g^.lGradEnd))
-    ctr p = ((fst . unp2 $ p) - 0.5) ^& ((snd . unp2 $ p) - 0.5)
+    p0 = rasterificPtTransf (g^.lGradTrans) (p2v2 (g^.lGradStart))
+    p1 = rasterificPtTransf (g^.lGradTrans) (p2v2 (g^.lGradEnd))
 
 
 rasterificRadialGradient :: RGradient -> R.Texture PixelRGBA8
