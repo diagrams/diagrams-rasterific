@@ -112,7 +112,7 @@ import           Control.Monad.Trans         (lift)
 import qualified Data.ByteString.Lazy as L   (writeFile)
 import           Data.Default.Class
 import qualified Data.Foldable               as F
-import           Data.Maybe                  (fromMaybe, isJust)
+import           Data.Maybe                  (fromMaybe, isJust, fromJust)
 import           Data.Tree
 import           Data.Typeable
 import           Data.Word                   (Word8)
@@ -361,15 +361,13 @@ mkStroke l j c d  primList =
 
 instance Renderable (Path R2) Rasterific where
   render _ p = R $ do
-    f <- fromMaybe (SC (SomeColor transparent)) <$> getStyleAttrib getFillTexture
+    f <- getStyleAttrib getFillTexture
     s <- fromMaybe (SC (SomeColor black)) <$> getStyleAttrib getLineTexture
     o <- fromMaybe 1 <$> getStyleAttrib getOpacity
     r <- fromMaybe Winding <$> getStyleAttrib getFillRule
     sty <- use accumStyle
 
-    let fColor = rasterificTexture f o
-        sColor = rasterificTexture s o
-        (l, j, c, d) = rasterificStrokeStyle sty
+    let (l, j, c, d) = rasterificStrokeStyle sty
         rule = fromFillRule r
 
         -- For stroking we need to keep all of the contours separate.
@@ -378,8 +376,9 @@ instance Renderable (Path R2) Rasterific where
         -- For filling we need to concatenate them into a flat list.
         prms = concat primList
 
-    liftR (R.withTexture fColor $ R.fillWithMethod rule prms)
-    liftR (R.withTexture sColor $ mkStroke l j c d primList)
+    when (isJust f) $ liftR (R.withTexture (rasterificTexture (fromJust f) o)
+                    $ R.fillWithMethod rule prms)
+    liftR (R.withTexture (rasterificTexture s o) $ mkStroke l j c d primList)
 
 instance Renderable (Segment Closed R2) Rasterific where
   render b = render b . (fromSegments :: [Segment Closed R2] -> Path R2) . (:[])
