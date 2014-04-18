@@ -99,7 +99,8 @@ import           GHC.Float                   (double2Float, float2Double)
 import qualified Graphics.Rasterific         as R
 import           Graphics.Rasterific.Texture (uniformTexture, Gradient(..)
                                              ,linearGradientTexture ,withSampler
-                                             ,radialGradientWithFocusTexture)
+                                             ,radialGradientWithFocusTexture
+                                             ,transformTexture)
 import qualified Graphics.Rasterific.Transformations as R
 import           Graphics.Text.TrueType      (loadFontFile, Font, stringBoundingBox)
 
@@ -258,25 +259,25 @@ rasterificStops s = map fromStop s
       (double2Float v, rasterificColor c 1)
 
 rasterificLinearGradient :: LGradient -> R.Texture PixelRGBA8
-rasterificLinearGradient g = withSampler spreadMethod
-                            (linearGradientTexture gradDef p0 p1)
+rasterificLinearGradient g = transformTexture tr tx
   where
+    tr = rasterificMatTransf (inv $ g^.lGradTrans)
+    tx = withSampler spreadMethod (linearGradientTexture gradDef p0 p1)
     spreadMethod = rasterificSpreadMethod (g^.lGradSpreadMethod)
     gradDef = rasterificStops (g^.lGradStops)
-    p0 = rasterificPtTransf (g^.lGradTrans) (p2v2 (g^.lGradStart))
-    p1 = rasterificPtTransf (g^.lGradTrans) (p2v2 (g^.lGradEnd))
+    p0 = p2v2 (g^.lGradStart)
+    p1 = p2v2 (g^.lGradEnd)
 
 
 rasterificRadialGradient :: RGradient -> R.Texture PixelRGBA8
-rasterificRadialGradient g = withSampler spreadMethod
-                             (radialGradientWithFocusTexture gradDef c r f)
+rasterificRadialGradient g = transformTexture tr tx
   where
+    tr = rasterificMatTransf (inv $ g^.rGradTrans)
+    tx = withSampler spreadMethod (radialGradientWithFocusTexture gradDef c r f)
     spreadMethod = rasterificSpreadMethod (g^.rGradSpreadMethod)
-    c = rasterificPtTransf (g^.rGradTrans) (p2v2 (g^.rGradCenter1))
-    f = rasterificPtTransf (g^.rGradTrans) (p2v2 (g^.rGradCenter0))
-    -- XXX This is a temporary approximation because rasterific
-    -- radii are expressed in absolute units instead of %.
-    r = double2Float $ r1 * avgScale (g^.rGradTrans)
+    c = p2v2 (g^.rGradCenter1)
+    f = p2v2 (g^.rGradCenter0)
+    r = double2Float r1
     gradDef = rasterificStops ss
 
     -- Adjust the stops so that the gradient begins at the perimeter of
