@@ -87,6 +87,7 @@ import           Diagrams.Core.Transform
 
 import           Diagrams.Prelude            hiding (opacity, view)
 import           Diagrams.TwoD.Adjust        (adjustDia2D)
+import           Diagrams.TwoD.Attributes    (splitFills)
 import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule)
 import           Diagrams.TwoD.Size          (sizePair)
 import           Diagrams.TwoD.Text          hiding (Font)
@@ -101,8 +102,11 @@ import           Graphics.Rasterific.Texture (uniformTexture, Gradient(..)
                                              ,linearGradientTexture ,withSampler
                                              ,radialGradientWithFocusTexture
                                              ,transformTexture)
+
 import qualified Graphics.Rasterific.Transformations as R
+
 import           Graphics.Text.TrueType      (loadFontFile, Font, stringBoundingBox)
+
 
 import           Control.Lens                hiding (transform, ( # ))
 import           Control.Monad               (when)
