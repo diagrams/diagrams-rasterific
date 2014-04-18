@@ -87,7 +87,7 @@ import           Diagrams.Core.Transform
 
 import           Diagrams.Prelude            hiding (opacity, view)
 import           Diagrams.TwoD.Adjust        (adjustDia2D)
-import           Diagrams.TwoD.Attributes    (splitFills)
+import           Diagrams.TwoD.Attributes    (splitColorFills, splitTextureFills)
 import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule)
 import           Diagrams.TwoD.Size          (sizePair)
 import           Diagrams.TwoD.Text          hiding (Font)
@@ -184,7 +184,8 @@ toRender :: RTree Rasterific R2 a -> Render Rasterific R2
 toRender = fromRTree
   . Node (RStyle (mempty # recommendFillColor (transparent :: AlphaColour Double)))
   . (:[])
-  . splitFills
+  . splitColorFills
+  . splitTextureFills
     where
       fromRTree (Node (RPrim p) _) = render Rasterific p
       fromRTree (Node (RStyle sty) rs) = R $ do
