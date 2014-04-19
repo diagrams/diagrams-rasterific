@@ -84,10 +84,12 @@ module Diagrams.Backend.Rasterific
 
 import           Diagrams.Core.Compile
 import           Diagrams.Core.Transform
+import           Diagrams.Core.Transform     (matrixHomRep)
+
 
 import           Diagrams.Prelude            hiding (opacity, view)
 import           Diagrams.TwoD.Adjust        (adjustDia2D)
-import           Diagrams.TwoD.Attributes    (splitColorFills, splitTextureFills)
+import           Diagrams.TwoD.Attributes    (splitTextureFills)
 import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule)
 import           Diagrams.TwoD.Size          (sizePair)
 import           Diagrams.TwoD.Text          hiding (Font)
@@ -184,7 +186,6 @@ toRender :: RTree Rasterific R2 a -> Render Rasterific R2
 toRender = fromRTree
   . Node (RStyle (mempty # recommendFillColor (transparent :: AlphaColour Double)))
   . (:[])
-  . splitColorFills
   . splitTextureFills
     where
       fromRTree (Node (RPrim p) _) = render Rasterific p
@@ -322,15 +323,7 @@ rasterificPtTransf tr p =  p2v2 $ transform tr p'
 rasterificMatTransf :: T2 -> R.Transformation
 rasterificMatTransf tr = R.Transformation a c e b d f
   where
-    (a,b,c,d,e,f) = map6 double2Float (getMatrix tr)
-    map6 g (x1, x2, x3, x4, x5, x6) = (g x1, g x2, g x3, g x4, g x5, g x6)
-
-getMatrix :: Transformation R2 -> (Double, Double, Double, Double, Double, Double)
-getMatrix t = (a1,a2,b1,b2,c1,c2)
- where
-  (unr2 -> (a1,a2)) = apply t unitX
-  (unr2 -> (b1,b2)) = apply t unitY
-  (unr2 -> (c1,c2)) = transl t
+    [[a, b], [c, d], [e, f]] = (map . map) double2Float (matrixHomRep tr)
 
 -- Note: Using view patterns confuses ghc to think there are missing patterns,
 -- so we avoid them here.
