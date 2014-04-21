@@ -178,7 +178,7 @@ instance Backend Rasterific R2 where
     where
       r = runRenderM . runR . toRender $ t
       (w,h) = sizePair (opts^.size)
-      bgColor = PixelRGBA8 255 255 255 255
+      bgColor = PixelRGBA8 0 0 0 0
 
   adjustDia c opts d = adjustDia2D size c opts (d # reflectY # fontSizeO 12)
 
