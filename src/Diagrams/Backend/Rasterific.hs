@@ -84,9 +84,12 @@ module Diagrams.Backend.Rasterific
 
 import           Diagrams.Core.Compile
 import           Diagrams.Core.Transform
+import           Diagrams.Core.Transform     (matrixHomRep)
+
 
 import           Diagrams.Prelude            hiding (opacity, view)
 import           Diagrams.TwoD.Adjust        (adjustDia2D)
+import           Diagrams.TwoD.Attributes    (splitTextureFills)
 import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule)
 import           Diagrams.TwoD.Size          (sizePair)
 import           Diagrams.TwoD.Text          hiding (Font)
@@ -97,9 +100,15 @@ import           Codec.Picture.Types         (dropTransparency, convertPixel)
 import           GHC.Float                   (double2Float, float2Double)
 
 import qualified Graphics.Rasterific         as R
-import           Graphics.Rasterific.Texture (uniformTexture)
+import           Graphics.Rasterific.Texture (uniformTexture, Gradient(..)
+                                             ,linearGradientTexture ,withSampler
+                                             ,radialGradientWithFocusTexture
+                                             ,transformTexture)
+
 import qualified Graphics.Rasterific.Transformations as R
+
 import           Graphics.Text.TrueType      (loadFontFile, Font, stringBoundingBox)
+
 
 import           Control.Lens                hiding (transform, ( # ))
 import           Control.Monad               (when)
@@ -110,7 +119,7 @@ import           Control.Monad.Trans         (lift)
 import qualified Data.ByteString.Lazy as L   (writeFile)
 import           Data.Default.Class
 import qualified Data.Foldable               as F
-import           Data.Maybe                  (fromMaybe, isJust)
+import           Data.Maybe                  (fromMaybe, isJust, fromJust)
 import           Data.Tree
 import           Data.Typeable
 import           Data.Word                   (Word8)
@@ -169,7 +178,7 @@ instance Backend Rasterific R2 where
     where
       r = runRenderM . runR . toRender $ t
       (w,h) = sizePair (opts^.size)
-      bgColor = PixelRGBA8 255 255 255 0
+      bgColor = PixelRGBA8 0 0 0 0
 
   adjustDia c opts d = adjustDia2D size c opts (d # reflectY # fontSizeO 12)
 
@@ -177,7 +186,7 @@ toRender :: RTree Rasterific R2 a -> Render Rasterific R2
 toRender = fromRTree
   . Node (RStyle (mempty # recommendFillColor (transparent :: AlphaColour Double)))
   . (:[])
-  . splitFills
+  . splitTextureFills
     where
       fromRTree (Node (RPrim p) _) = render Rasterific p
       fromRTree (Node (RStyle sty) rs) = R $ do
@@ -237,13 +246,62 @@ fromFillRule _ = R.FillWinding
 getStyleAttrib :: AttributeClass a => (a -> b) -> RenderM (Maybe b)
 getStyleAttrib f = (fmap f . getAttr) <$> use accumStyle
 
-sourceColor :: Maybe (AlphaColour Double) -> Double -> PixelRGBA8
-sourceColor Nothing  _ = PixelRGBA8 0 0 0 0
-sourceColor (Just c) o = PixelRGBA8 r g b a
+rasterificColor :: SomeColor -> Double -> PixelRGBA8
+rasterificColor c o = PixelRGBA8 r g b a
   where
     (r, g, b, a) = (int r', int g', int b', int (o * a'))
-    (r', g', b', a') = colorToSRGBA c
+    (r', g', b', a') = colorToSRGBA (toAlphaColour c)
     int x = round (255 * x)
+
+rasterificSpreadMethod :: SpreadMethod -> R.SamplerRepeat
+rasterificSpreadMethod GradPad      = R.SamplerPad
+rasterificSpreadMethod GradReflect  = R.SamplerReflect
+rasterificSpreadMethod GradRepeat   = R.SamplerRepeat
+
+rasterificStops :: [GradientStop] -> Gradient PixelRGBA8
+rasterificStops s = map fromStop s
+  where
+    fromStop (GradientStop c v) =
+      (double2Float v, rasterificColor c 1)
+
+rasterificLinearGradient :: LGradient -> R.Texture PixelRGBA8
+rasterificLinearGradient g = transformTexture tr tx
+  where
+    tr = rasterificMatTransf (inv $ g^.lGradTrans)
+    tx = withSampler spreadMethod (linearGradientTexture gradDef p0 p1)
+    spreadMethod = rasterificSpreadMethod (g^.lGradSpreadMethod)
+    gradDef = rasterificStops (g^.lGradStops)
+    p0 = p2v2 (g^.lGradStart)
+    p1 = p2v2 (g^.lGradEnd)
+
+
+rasterificRadialGradient :: RGradient -> R.Texture PixelRGBA8
+rasterificRadialGradient g = transformTexture tr tx
+  where
+    tr = rasterificMatTransf (inv $ g^.rGradTrans)
+    tx = withSampler spreadMethod (radialGradientWithFocusTexture gradDef c r f)
+    spreadMethod = rasterificSpreadMethod (g^.rGradSpreadMethod)
+    c = p2v2 (g^.rGradCenter1)
+    f = p2v2 (g^.rGradCenter0)
+    r = double2Float r1
+    gradDef = rasterificStops ss
+
+    -- Adjust the stops so that the gradient begins at the perimeter of
+    -- the inner circle (center0, radius0) and ends at the outer circle.
+    r0 = g^.rGradRadius0
+    r1 = g^.rGradRadius1
+    stopFracs = r0 / r1 : map (\s -> (r0 + (s^.stopFraction) * (r1-r0)) / r1)
+                (g^.rGradStops)
+    gradStops = case g^.rGradStops of
+      []       -> []
+      xs@(x:_) -> x : xs
+    ss = zipWith (\gs sf -> gs & stopFraction .~ sf ) gradStops stopFracs
+
+-- Convert a diagrams @Texture@ and opacity to a rasterific texture.
+rasterificTexture :: Texture -> Double -> R.Texture PixelRGBA8
+rasterificTexture (SC c) o = uniformTexture $ rasterificColor c o
+rasterificTexture (LG g) _ = rasterificLinearGradient g
+rasterificTexture (RG g) _ = rasterificRadialGradient g
 
 v2 :: Double -> Double -> R.Point
 v2 x y = R.V2 x' y'
@@ -265,15 +323,7 @@ rasterificPtTransf tr p =  p2v2 $ transform tr p'
 rasterificMatTransf :: T2 -> R.Transformation
 rasterificMatTransf tr = R.Transformation a c e b d f
   where
-    (a,b,c,d,e,f) = map6 double2Float (getMatrix tr)
-    map6 g (x1, x2, x3, x4, x5, x6) = (g x1, g x2, g x3, g x4, g x5, g x6)
-
-getMatrix :: Transformation R2 -> (Double, Double, Double, Double, Double, Double)
-getMatrix t = (a1,a2,b1,b2,c1,c2)
- where
-  (unr2 -> (a1,a2)) = apply t unitX
-  (unr2 -> (b1,b2)) = apply t unitY
-  (unr2 -> (c1,c2)) = transl t
+    [[a, b], [c, d], [e, f]] = (map . map) double2Float (matrixHomRep tr)
 
 -- Note: Using view patterns confuses ghc to think there are missing patterns,
 -- so we avoid them here.
@@ -309,15 +359,13 @@ mkStroke l j c d  primList =
 
 instance Renderable (Path R2) Rasterific where
   render _ p = R $ do
-    f <- getStyleAttrib (toAlphaColour . getFillColor)
-    s <- getStyleAttrib (toAlphaColour . getLineColor)
+    f <- getStyleAttrib getFillTexture
+    s <- fromMaybe (SC (SomeColor black)) <$> getStyleAttrib getLineTexture
     o <- fromMaybe 1 <$> getStyleAttrib getOpacity
     r <- fromMaybe Winding <$> getStyleAttrib getFillRule
     sty <- use accumStyle
 
-    let fColor = uniformTexture $ sourceColor f o
-        sColor = uniformTexture $ sourceColor s o
-        (l, j, c, d) = rasterificStrokeStyle sty
+    let (l, j, c, d) = rasterificStrokeStyle sty
         rule = fromFillRule r
 
         -- For stroking we need to keep all of the contours separate.
@@ -326,8 +374,9 @@ instance Renderable (Path R2) Rasterific where
         -- For filling we need to concatenate them into a flat list.
         prms = concat primList
 
-    when (isJust f) $ liftR (R.withTexture fColor $ R.fillWithMethod rule prms)
-    liftR (R.withTexture sColor $ mkStroke l j c d primList)
+    when (isJust f) $ liftR (R.withTexture (rasterificTexture (fromJust f) o)
+                    $ R.fillWithMethod rule prms)
+    liftR (R.withTexture (rasterificTexture s o) $ mkStroke l j c d primList)
 
 instance Renderable (Segment Closed R2) Rasterific where
   render b = render b . (fromSegments :: [Segment Closed R2] -> Path R2) . (:[])
@@ -377,9 +426,9 @@ instance Renderable Text Rasterific where
     fs <- fromMaybe 12 <$> getStyleAttrib (fromOutput . getFontSize)
     slant <- fromMaybe FontSlantNormal <$> getStyleAttrib getFontSlant
     fw <- fromMaybe FontWeightNormal <$> getStyleAttrib getFontWeight
-    f <- getStyleAttrib (toAlphaColour . getFillColor)
+    f <- fromMaybe (SC (SomeColor black)) <$> getStyleAttrib getFillTexture
     o <- fromMaybe 1 <$> getStyleAttrib getOpacity
-    let fColor = uniformTexture $ sourceColor f o
+    let fColor = rasterificTexture f o
         fs' = round fs
         fnt = fromFontStyle slant fw
         (x, y) = textBox fnt fs' str
