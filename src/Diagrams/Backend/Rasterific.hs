@@ -378,12 +378,6 @@ instance Renderable (Path R2) Rasterific where
                     $ R.fillWithMethod rule prms)
     liftR (R.withTexture (rasterificTexture s o) $ mkStroke l j c d primList)
 
-instance Renderable (Segment Closed R2) Rasterific where
-  render b = render b . (fromSegments :: [Segment Closed R2] -> Path R2) . (:[])
-
-instance Renderable (Trail R2) Rasterific where
-  render b = render b . pathFromTrail
-
 -- read only of static data (safe)
 ro :: FilePath -> FilePath
 ro = unsafePerformIO . getDataFileName
