@@ -83,7 +83,6 @@ module Diagrams.Backend.Rasterific
   ) where
 
 import           Diagrams.Core.Compile
-import           Diagrams.Core.Transform
 import           Diagrams.Core.Transform     (matrixHomRep)
 
 
@@ -100,7 +99,7 @@ import           Codec.Picture.Types         (dropTransparency, convertPixel)
 import           GHC.Float                   (double2Float, float2Double)
 
 import qualified Graphics.Rasterific         as R
-import           Graphics.Rasterific.Texture (uniformTexture, Gradient(..)
+import           Graphics.Rasterific.Texture (uniformTexture, Gradient
                                              ,linearGradientTexture ,withSampler
                                              ,radialGradientWithFocusTexture
                                              ,transformTexture)
