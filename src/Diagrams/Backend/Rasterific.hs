@@ -415,7 +415,8 @@ textBox f ps str = (float2Double w, float2Double h)
     (w, h) = stringBoundingBox f 96 ps str
 
 instance Renderable Text Rasterific where
-  render _ (Text tr al str) = R $ do
+  render _ (Text tt tn al str) = R $ do
+    isLocal <- fromMaybe True <$> getStyleAttrib getFontSizeIsLocal
     fs <- fromMaybe 12 <$> getStyleAttrib (fromOutput . getFontSize)
     slant <- fromMaybe FontSlantNormal <$> getStyleAttrib getFontSlant
     fw <- fromMaybe FontWeightNormal <$> getStyleAttrib getFontWeight
@@ -428,8 +429,10 @@ instance Renderable Text Rasterific where
         (refX, refY) = case al of
           BaselineText -> (0, y)
           BoxAlignedText xt yt -> (x * xt, (1 - yt) * y)
-        p = rasterificPtTransf ((moveOriginBy (r2 (refX, refY)) mempty) <> tr) (R.V2 0 0)
-    liftR (R.withTexture fColor $ R.printTextAt fnt fs' p str)
+        tr = if isLocal then tt else tn
+        p = rasterificPtTransf ((moveOriginBy (r2 (refX, refY)) mempty)) (R.V2 0 0)
+    liftR (R.withTransformation (rasterificMatTransf (tr <> reflectionY))
+            (R.withTexture fColor $ R.printTextAt fnt fs' p str))
 
 instance Renderable (DImage Embedded) Rasterific where
   render _ (DImage iD w h tr) = R $ liftR
