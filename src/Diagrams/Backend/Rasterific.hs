@@ -429,8 +429,10 @@ instance Renderable Text Rasterific where
         (refX, refY) = case al of
           BaselineText -> (0, y)
           BoxAlignedText xt yt -> (x * xt, (1 - yt) * y)
-        p = rasterificPtTransf ((moveOriginBy (r2 (refX, refY)) mempty) <> if isLocal then tt else tn) (R.V2 0 0)
-    liftR (R.withTexture fColor $ R.printTextAt fnt fs' p str)
+        tr = if isLocal then tt else tn
+        p = rasterificPtTransf ((moveOriginBy (r2 (refX, refY)) mempty)) (R.V2 0 0)
+    liftR (R.withTransformation (rasterificMatTransf (tr <> reflectionY))
+            (R.withTexture fColor $ R.printTextAt fnt fs' p str))
 
 instance Renderable (DImage Embedded) Rasterific where
   render _ (DImage iD w h tr) = R $ liftR
