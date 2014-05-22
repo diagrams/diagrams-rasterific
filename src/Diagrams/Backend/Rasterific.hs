@@ -94,7 +94,8 @@ import           Diagrams.TwoD.Size          (sizePair)
 import           Diagrams.TwoD.Text          hiding (Font)
 
 import           Codec.Picture
-import           Codec.Picture.Types         (dropTransparency, convertPixel)
+import           Codec.Picture.Types         (dropTransparency, convertPixel
+                                             , promotePixel, convertImage)
 
 import           GHC.Float                   (double2Float, float2Double)
 
@@ -359,7 +360,8 @@ mkStroke l j c d  primList =
 instance Renderable (Path R2) Rasterific where
   render _ p = R $ do
     f <- getStyleAttrib getFillTexture
-    s <- fromMaybe (SC (SomeColor black)) <$> getStyleAttrib getLineTexture
+    s <- fromMaybe (SC (SomeColor (black :: Colour Double))) 
+         <$> getStyleAttrib getLineTexture
     o <- fromMaybe 1 <$> getStyleAttrib getOpacity
     r <- fromMaybe Winding <$> getStyleAttrib getFillRule
     sty <- use accumStyle
@@ -417,11 +419,12 @@ textBox f ps str = (float2Double w, float2Double h)
 instance Renderable Text Rasterific where
   render _ (Text tt tn al str) = R $ do
     isLocal <- fromMaybe True <$> getStyleAttrib getFontSizeIsLocal
-    fs <- fromMaybe 12 <$> getStyleAttrib (fromOutput . getFontSize)
-    slant <- fromMaybe FontSlantNormal <$> getStyleAttrib getFontSlant
-    fw <- fromMaybe FontWeightNormal <$> getStyleAttrib getFontWeight
-    f <- fromMaybe (SC (SomeColor black)) <$> getStyleAttrib getFillTexture
-    o <- fromMaybe 1 <$> getStyleAttrib getOpacity
+    fs      <- fromMaybe 12 <$> getStyleAttrib (fromOutput . getFontSize)
+    slant   <- fromMaybe FontSlantNormal <$> getStyleAttrib getFontSlant
+    fw      <- fromMaybe FontWeightNormal <$> getStyleAttrib getFontWeight
+    f       <- fromMaybe (SC (SomeColor (black :: Colour Double))) 
+               <$> getStyleAttrib getFillTexture
+    o       <- fromMaybe 1 <$> getStyleAttrib getOpacity
     let fColor = rasterificTexture f o
         fs' = round fs
         fnt = fromFontStyle slant fw
@@ -432,7 +435,16 @@ instance Renderable Text Rasterific where
         tr = if isLocal then tt else tn
         p = rasterificPtTransf ((moveOriginBy (r2 (refX, refY)) mempty)) (R.V2 0 0)
     liftR (R.withTransformation (rasterificMatTransf (tr <> reflectionY))
-            (R.withTexture fColor $ R.printTextAt fnt fs' p str))
+          (R.withTexture fColor $ R.printTextAt fnt fs' p str))
+
+toImageRGBA8 :: DynamicImage -> Image PixelRGBA8
+toImageRGBA8 (ImageRGBA8 i)  = i
+toImageRGBA8 (ImageRGB8 i)   = pixelMap promotePixel i
+toImageRGBA8 (ImageYCbCr8 i) = pixelMap promotePixel $ (convertImage i :: Image PixelRGB8)
+toImageRGBA8 (ImageY8 i)     = pixelMap promotePixel i
+toImageRGBA8 (ImageYA8 i)    = pixelMap promotePixel i
+toImageRGBA8 (ImageCMYK8 i)  = pixelMap promotePixel $ (convertImage i :: Image PixelRGB8)
+toImageRGBA8 _               = error "Unsupported Pixel type"
 
 instance Renderable (DImage Embedded) Rasterific where
   render _ (DImage iD w h tr) = R $ liftR
@@ -441,12 +453,9 @@ instance Renderable (DImage Embedded) Rasterific where
                                (R.drawImage img 0 p))
     where
       ImageRaster dImg = iD
-      img = case dImg of
-              ImageRGBA8 i -> i
-              _            -> error "Invalid image type"
-      p = rasterificPtTransf ((moveOriginBy
-                              (r2 ((fromIntegral w / 2), (fromIntegral h / 2)))
-                               mempty)) (R.V2 0 0)
+      img = toImageRGBA8 dImg
+      trl = moveOriginBy (r2 ((fromIntegral w / 2), (fromIntegral h / 2))) mempty 
+      p = rasterificPtTransf trl (R.V2 0 0)
 
 writeJpeg :: Word8 -> FilePath -> Result Rasterific R2 -> IO ()
 writeJpeg quality outFile img = L.writeFile outFile bs
