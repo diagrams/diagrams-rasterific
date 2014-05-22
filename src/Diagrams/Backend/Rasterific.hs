@@ -95,7 +95,7 @@ import           Diagrams.TwoD.Text          hiding (Font)
 
 import           Codec.Picture
 import           Codec.Picture.Types         (dropTransparency, convertPixel
-                                             , promotePixel, convertImage)
+                                             ,promoteImage, convertImage)
 
 import           GHC.Float                   (double2Float, float2Double)
 
@@ -439,11 +439,11 @@ instance Renderable Text Rasterific where
 
 toImageRGBA8 :: DynamicImage -> Image PixelRGBA8
 toImageRGBA8 (ImageRGBA8 i)  = i
-toImageRGBA8 (ImageRGB8 i)   = pixelMap promotePixel i
-toImageRGBA8 (ImageYCbCr8 i) = pixelMap promotePixel $ (convertImage i :: Image PixelRGB8)
-toImageRGBA8 (ImageY8 i)     = pixelMap promotePixel i
-toImageRGBA8 (ImageYA8 i)    = pixelMap promotePixel i
-toImageRGBA8 (ImageCMYK8 i)  = pixelMap promotePixel $ (convertImage i :: Image PixelRGB8)
+toImageRGBA8 (ImageRGB8 i)   = promoteImage i
+toImageRGBA8 (ImageYCbCr8 i) = promoteImage $ (convertImage i :: Image PixelRGB8)
+toImageRGBA8 (ImageY8 i)     = promoteImage i
+toImageRGBA8 (ImageYA8 i)    = promoteImage i
+toImageRGBA8 (ImageCMYK8 i)  = promoteImage $ (convertImage i :: Image PixelRGB8)
 toImageRGBA8 _               = error "Unsupported Pixel type"
 
 instance Renderable (DImage Embedded) Rasterific where
