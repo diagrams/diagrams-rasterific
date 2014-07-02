@@ -48,8 +48,7 @@
 -- particular backend.  For @b ~ Rasterific@ and @v ~ R2@, we have
 --
 -- > data Options Rasterific R2 = RasterificOptions
--- >          { _rasterificSizeSpec      :: SizeSpec2D -- ^ The requested size of the output
--- >          , _rasterificBypassAdjust  :: Bool       -- ^ Should the 'adjustDia' step be bypassed during rendering?
+-- >          { _size      :: SizeSpec2D -- ^ The requested size of the output
 -- >          }
 --
 -- @
