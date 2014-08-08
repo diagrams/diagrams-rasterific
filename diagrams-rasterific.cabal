@@ -8,7 +8,7 @@ license:             BSD3
 license-file:        LICENSE
 author:              Jeffrey Rosenbluth
 maintainer:          diagrams-discuss@googlegroups.com
-bug-reports:         http://github.com/diagrams/diagrams-cairo/issues
+bug-reports:         http://github.com/diagrams/diagrams-rasterific/issues
 category:            Graphics
 build-type:          Simple
 data-files:          fonts/*.ttf
