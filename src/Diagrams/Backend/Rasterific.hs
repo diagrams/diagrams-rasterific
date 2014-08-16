@@ -72,6 +72,7 @@
 module Diagrams.Backend.Rasterific
   ( Rasterific(..)
   , B -- rendering token
+  , R2, P2, T2 -- float types
   , Options(..)
 
   , renderRasterific
@@ -91,12 +92,11 @@ import           Diagrams.TwoD.Attributes    (splitTextureFills)
 import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule)
 import           Diagrams.TwoD.Size          (sizePair)
 import           Diagrams.TwoD.Text          hiding (Font)
+import           Diagrams.TwoD.Types.Float
 
 import           Codec.Picture
 import           Codec.Picture.Types         (dropTransparency, convertPixel
                                              ,promoteImage, convertImage)
-
-import           GHC.Float                   (double2Float, float2Double)
 
 import qualified Graphics.Rasterific         as R
 import           Graphics.Rasterific.Texture (uniformTexture, Gradient
@@ -168,7 +168,7 @@ instance Backend Rasterific R2 where
   data Render  Rasterific R2 = R (RenderM ())
   type Result  Rasterific R2 = Image PixelRGBA8
   data Options Rasterific R2 = RasterificOptions
-          { _size      :: SizeSpec2D -- ^ The requested size of the output
+          { _size      :: SizeSpec2D Float -- ^ The requested size of the output
           }
     deriving (Show)
 
@@ -205,7 +205,7 @@ instance Monoid (Render Rasterific R2) where
   mempty  = R $ return ()
   (R rd1) `mappend` (R rd2) = R (rd1 >> rd2)
 
-size :: Lens' (Options Rasterific R2) SizeSpec2D
+size :: Lens' (Options Rasterific R2) (SizeSpec2D Float)
 size = lens (\(RasterificOptions {_size = s}) -> s)
                      (\o s -> o {_size = s})
 
@@ -213,7 +213,7 @@ rasterificStrokeStyle :: Style v
                      -> (Float, R.Join, (R.Cap, R.Cap), Maybe (R.DashPattern, Float))
 rasterificStrokeStyle s = (strokeWidth, strokeJoin, strokeCaps, strokeDash)
   where
-    strokeWidth = double2Float $ case getLineWidth <$> getAttr s of
+    strokeWidth = case getLineWidth <$> (getAttr s :: Maybe (LineWidth R2)) of
                       Just o ->  fromOutput o
                       _               ->  1
     strokeJoin = fromMaybe (R.JoinMiter 0) (fromLineJoin . getLineJoin <$> getAttr s)
@@ -231,8 +231,8 @@ fromLineJoin LineJoinMiter = R.JoinMiter 0
 fromLineJoin LineJoinRound = R.JoinRound
 fromLineJoin LineJoinBevel = R.JoinMiter 1
 
-fromDashing :: Dashing -> (R.DashPattern, Float)
-fromDashing (Dashing ds d) = (map double2Float ds', double2Float d')
+fromDashing :: Dashing R2 -> (R.DashPattern, Float)
+fromDashing (Dashing ds d) = (ds', d')
   where
     ds' = map fromOutput ds
     d' = fromOutput d
@@ -257,13 +257,13 @@ rasterificSpreadMethod GradPad      = R.SamplerPad
 rasterificSpreadMethod GradReflect  = R.SamplerReflect
 rasterificSpreadMethod GradRepeat   = R.SamplerRepeat
 
-rasterificStops :: [GradientStop] -> Gradient PixelRGBA8
+rasterificStops :: [GradientStop Float] -> Gradient PixelRGBA8
 rasterificStops s = map fromStop s
   where
     fromStop (GradientStop c v) =
-      (double2Float v, rasterificColor c 1)
+      (v, rasterificColor c 1)
 
-rasterificLinearGradient :: LGradient -> R.Texture PixelRGBA8
+rasterificLinearGradient :: LGradient R2 -> R.Texture PixelRGBA8
 rasterificLinearGradient g = transformTexture tr tx
   where
     tr = rasterificMatTransf (inv $ g^.lGradTrans)
@@ -274,7 +274,7 @@ rasterificLinearGradient g = transformTexture tr tx
     p1 = p2v2 (g^.lGradEnd)
 
 
-rasterificRadialGradient :: RGradient -> R.Texture PixelRGBA8
+rasterificRadialGradient :: RGradient R2 -> R.Texture PixelRGBA8
 rasterificRadialGradient g = transformTexture tr tx
   where
     tr = rasterificMatTransf (inv $ g^.rGradTrans)
@@ -282,7 +282,7 @@ rasterificRadialGradient g = transformTexture tr tx
     spreadMethod = rasterificSpreadMethod (g^.rGradSpreadMethod)
     c = p2v2 (g^.rGradCenter1)
     f = p2v2 (g^.rGradCenter0)
-    r = double2Float r1
+    r = r1
     gradDef = rasterificStops ss
 
     -- Adjust the stops so that the gradient begins at the perimeter of
@@ -297,15 +297,13 @@ rasterificRadialGradient g = transformTexture tr tx
     ss = zipWith (\gs sf -> gs & stopFraction .~ sf ) gradStops stopFracs
 
 -- Convert a diagrams @Texture@ and opacity to a rasterific texture.
-rasterificTexture :: Texture -> Double -> R.Texture PixelRGBA8
+rasterificTexture :: Texture R2 -> Double -> R.Texture PixelRGBA8
 rasterificTexture (SC c) o = uniformTexture $ rasterificColor c o
 rasterificTexture (LG g) _ = rasterificLinearGradient g
 rasterificTexture (RG g) _ = rasterificRadialGradient g
 
-v2 :: Double -> Double -> R.Point
-v2 x y = R.V2 x' y'
-  where
-    (x', y') = (double2Float x, double2Float y)
+v2 :: Float -> Float -> R.Point
+v2 x y = R.V2 x y
 
 p2v2 :: P2 -> R.Point
 p2v2 p = uncurry v2 $ unp2 p
@@ -316,13 +314,13 @@ r2v2 r = uncurry v2 $ unr2 r
 rasterificPtTransf :: T2 -> R.Point -> R.Point
 rasterificPtTransf tr p =  p2v2 $ transform tr p'
   where
-    p' = mkP2 (float2Double x) (float2Double y)
+    p' = mkP2 x y
     R.V2 x y = p
 
 rasterificMatTransf :: T2 -> R.Transformation
 rasterificMatTransf tr = R.Transformation a c e b d f
   where
-    [[a, b], [c, d], [e, f]] = (map . map) double2Float (matrixHomRep tr)
+    [[a, b], [c, d], [e, f]] = matrixHomRep tr
 
 -- Note: Using view patterns confuses ghc to think there are missing patterns,
 -- so we avoid them here.
@@ -410,15 +408,15 @@ fromFontStyle FontSlantItalic FontWeightNormal = openSansItalic
 fromFontStyle FontSlantOblique FontWeightNormal = openSansItalic
 fromFontStyle _ _ = openSansRegular
 
-textBox :: Font -> Int -> String -> (Double, Double)
-textBox f ps str = (float2Double w, float2Double h)
+textBox :: Font -> Int -> String -> (Float, Float)
+textBox f ps str = (w, h)
   where
     (w, h) = stringBoundingBox f 96 ps str
 
-instance Renderable Text Rasterific where
+instance Renderable (Text R2) Rasterific where
   render _ (Text tt tn al str) = R $ do
-    isLocal <- fromMaybe True <$> getStyleAttrib getFontSizeIsLocal
-    fs      <- fromMaybe 12 <$> getStyleAttrib (fromOutput . getFontSize)
+    isLocal <- fromMaybe True <$> getStyleAttrib (getFontSizeIsLocal :: FontSize R2 -> Bool)
+    fs      <- fromMaybe 12 <$> getStyleAttrib (fromOutput . (getFontSize :: FontSize R2 -> Measure R2))
     slant   <- fromMaybe FontSlantNormal <$> getStyleAttrib getFontSlant
     fw      <- fromMaybe FontWeightNormal <$> getStyleAttrib getFontWeight
     f       <- fromMaybe (SC (SomeColor (black :: Colour Double))) 
@@ -445,7 +443,7 @@ toImageRGBA8 (ImageYA8 i)    = promoteImage i
 toImageRGBA8 (ImageCMYK8 i)  = promoteImage $ (convertImage i :: Image PixelRGB8)
 toImageRGBA8 _               = error "Unsupported Pixel type"
 
-instance Renderable (DImage Embedded) Rasterific where
+instance Renderable (DImage R2 Embedded) Rasterific where
   render _ (DImage iD w h tr) = R $ liftR
                                (R.withTransformation
                                (rasterificMatTransf (tr <> reflectionY))
@@ -461,7 +459,7 @@ writeJpeg quality outFile img = L.writeFile outFile bs
   where
     bs = encodeJpegAtQuality quality (pixelMap (convertPixel . dropTransparency) img)
 
-renderRasterific :: FilePath -> SizeSpec2D -> Word8 -> Diagram Rasterific R2 -> IO ()
+renderRasterific :: FilePath -> SizeSpec2D Float -> Word8 -> Diagram Rasterific R2 -> IO ()
 renderRasterific outFile sizeSpec quality d = writer outFile img
   where
     writer = case takeExtension outFile of
