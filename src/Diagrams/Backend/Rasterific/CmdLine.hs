@@ -88,7 +88,7 @@ import           Codec.Picture.ColorQuant     (defaultPaletteOptions)
 import qualified Data.ByteString.Lazy as L    (ByteString, writeFile)
 
 import           Options.Applicative
-import           Control.Lens                 ((^.), Lens', makeLenses)
+import           Control.Lens                 ((^.), Lens', makeLenses, ASetter', _2)
 
 import           Data.List.Split
 
@@ -136,6 +136,9 @@ defaultMain = mainWith
 output' :: Lens' (MainOpts (Diagram Rasterific R2)) FilePath
 output' = _1 . output
 
+loop' :: Maybe (ASetter' (MainOpts (Diagram Rasterific R2)) DiagramLoopOpts)
+loop' = Just _2
+
 instance Mainable (Diagram Rasterific R2) where
     type MainOpts (Diagram Rasterific R2) = (DiagramOpts, DiagramLoopOpts)
 
@@ -146,6 +149,9 @@ instance Mainable (Diagram Rasterific R2) where
 
 output' :: Lens' (MainOpts (Diagram Rasterific R2)) FilePath
 output' = output
+
+loop' :: Maybe (ASetter' (MainOpts (Diagram Rasterific R2)) DiagramLoopOpts)
+loop' = Nothing
 
 instance Mainable (Diagram Rasterific R2) where
     type MainOpts (Diagram Rasterific R2) = DiagramOpts
@@ -226,7 +232,7 @@ instance Mainable (Animation Rasterific R2) where
     type MainOpts (Animation Rasterific R2) =
       (MainOpts (Diagram Rasterific R2), DiagramAnimOpts)
 
-    mainRender = defaultAnimMainRender output'
+    mainRender = defaultAnimMainRender output' loop'
 
 #ifdef CMDLINELOOP
 
