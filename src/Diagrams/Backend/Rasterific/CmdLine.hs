@@ -88,71 +88,20 @@ import           Codec.Picture.ColorQuant     (defaultPaletteOptions)
 import qualified Data.ByteString.Lazy as L    (ByteString, writeFile)
 
 import           Options.Applicative
-import           Control.Lens                 ((^.), Lens', makeLenses)
+import           Control.Lens                 ((^.), makeLenses)
 
 import           Data.List.Split
 
-#ifdef CMDLINELOOP
-
-import           Data.Maybe                  (fromMaybe)
-import           Control.Monad               (when, mplus)
-import           Control.Lens                (_1)
-
-import           System.Environment          (getArgs, getProgName)
-import           System.Directory            (getModificationTime)
-import           System.Process              (runProcess, waitForProcess)
-import           System.IO                   (openFile, hClose, IOMode(..)
-                                             ,hSetBuffering, BufferMode(..)
-                                             ,stdout)
-import           System.Exit                 (ExitCode(..))
-import           Control.Concurrent          (threadDelay)
-import           Control.Exception           (catch, SomeException(..), bracket)
-import           System.Posix.Process        (executeFile)
-
-#if MIN_VERSION_directory(1,2,0)
-
-import           Data.Time.Clock             (UTCTime,getCurrentTime)
-
-type ModuleTime = UTCTime
-getModuleTime :: IO  ModuleTime
-getModuleTime = getCurrentTime
-
-#else
-
-import          System.Time                  (ClockTime, getClockTime)
-
-type ModuleTime = ClockTime
-getModuleTime :: IO  ModuleTime
-getModuleTime = getClockTime
-
-#endif
-#endif
 
 defaultMain :: Diagram Rasterific R2 -> IO ()
 defaultMain = mainWith
-
-#ifdef CMDLINELOOP
-
-output' :: Lens' (MainOpts (Diagram Rasterific R2)) FilePath
-output' = _1 . output
 
 instance Mainable (Diagram Rasterific R2) where
     type MainOpts (Diagram Rasterific R2) = (DiagramOpts, DiagramLoopOpts)
 
     mainRender (opts,loopOpts) d = do
         chooseRender opts d
-        when (loopOpts^.loop) (waitForChange Nothing loopOpts)
-#else
-
-output' :: Lens' (MainOpts (Diagram Rasterific R2)) FilePath
-output' = output
-
-instance Mainable (Diagram Rasterific R2) where
-    type MainOpts (Diagram Rasterific R2) = DiagramOpts
-
-    mainRender opts d = chooseRender opts d
-
-#endif
+        defaultLoopRender loopOpts
 
 chooseRender :: DiagramOpts -> Diagram Rasterific R2 -> IO ()
 chooseRender opts d =
@@ -224,59 +173,9 @@ animMain = mainWith
 
 instance Mainable (Animation Rasterific R2) where
     type MainOpts (Animation Rasterific R2) =
-      (MainOpts (Diagram Rasterific R2), DiagramAnimOpts)
+      ((DiagramOpts, DiagramAnimOpts), DiagramLoopOpts)
 
-    mainRender = defaultAnimMainRender output'
-
-#ifdef CMDLINELOOP
-
-waitForChange :: Maybe ModuleTime -> DiagramLoopOpts -> IO ()
-waitForChange lastAttempt opts = do
-    prog <- getProgName
-    args <- getArgs
-    hSetBuffering stdout NoBuffering
-    go prog args lastAttempt
-  where go prog args lastAtt = do
-          threadDelay (1000000 * opts^.interval)
-          -- putStrLn $ "Checking... (last attempt = " ++ show lastAttempt ++ ")"
-          (newBin, newAttempt) <- recompile lastAtt prog (opts^.src)
-          if newBin
-            then executeFile prog False args Nothing
-            else go prog args $ newAttempt `mplus` lastAtt
-
--- | @recompile t prog@ attempts to recompile @prog@, assuming the
---   last attempt was made at time @t@.  If @t@ is @Nothing@ assume
---   the last attempt time is the same as the modification time of the
---   binary.  If the source file modification time is later than the
---   last attempt time, then attempt to recompile, and return the time
---   of this attempt.  Otherwise (if nothing has changed since the
---   last attempt), return @Nothing@.  Also return a Bool saying
---   whether a successful recompilation happened.
-recompile :: Maybe ModuleTime -> String -> Maybe String -> IO (Bool, Maybe ModuleTime)
-recompile lastAttempt prog mSrc = do
-  let errFile = prog ++ ".errors"
-      srcFile = fromMaybe (prog ++ ".hs") mSrc
-  binT <- maybe (getModTime prog) (return . Just) lastAttempt
-  srcT <- getModTime srcFile
-  if (srcT > binT)
-    then do
-      putStr "Recompiling..."
-      status <- bracket (openFile errFile WriteMode) hClose $ \h ->
-        waitForProcess =<< runProcess "ghc" ["--make", srcFile]
-                           Nothing Nothing Nothing Nothing (Just h)
-
-      if (status /= ExitSuccess)
-        then putStrLn "" >> putStrLn (replicate 75 '-') >> readFile errFile >>= putStr
-        else putStrLn "done."
-
-      curTime <- getModuleTime
-      return (status == ExitSuccess, Just curTime)
-
-    else return (False, Nothing)
-
- where getModTime f = catch (Just <$> getModificationTime f)
-                            (\(SomeException _) -> return Nothing)
-#endif
+    mainRender (opts, l) d = defaultAnimMainRender chooseRender output opts d >> defaultLoopRender l
 
 gifMain :: [(Diagram Rasterific R2, GifDelay)] -> IO ()
 gifMain = mainWith
