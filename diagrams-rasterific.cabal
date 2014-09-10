@@ -24,10 +24,6 @@ library
   hs-source-dirs:      src
   other-modules:       Paths_diagrams_rasterific
   build-depends:       base >= 4.2 && < 4.8,
-                       old-time,
-                       time,
-                       process,
-                       directory,
                        diagrams-core >= 1.2 && < 1.3,
                        diagrams-lib >= 1.2 && < 1.3,
                        Rasterific >= 0.2 && < 0.4,
