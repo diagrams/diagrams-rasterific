@@ -93,17 +93,17 @@ import           Control.Lens                 ((^.), makeLenses)
 import           Data.List.Split
 
 
-defaultMain :: Diagram Rasterific R2 -> IO ()
+defaultMain :: Diagram Rasterific V2 Float -> IO ()
 defaultMain = mainWith
 
-instance Mainable (Diagram Rasterific R2) where
-    type MainOpts (Diagram Rasterific R2) = (DiagramOpts, DiagramLoopOpts)
+instance Mainable (Diagram Rasterific V2 Float) where
+    type MainOpts (Diagram Rasterific V2 Float) = (DiagramOpts, DiagramLoopOpts)
 
     mainRender (opts,loopOpts) d = do
         chooseRender opts d
         defaultLoopRender loopOpts
 
-chooseRender :: DiagramOpts -> Diagram Rasterific R2 -> IO ()
+chooseRender :: DiagramOpts -> Diagram Rasterific V2 Float -> IO ()
 chooseRender opts d =
   case splitOn "." (opts ^. output) of
     [""] -> putStrLn "No output file given."
@@ -143,12 +143,12 @@ chooseRender opts d =
 -- $ ./MultiTest --selection bar -o Bar.png -w 200
 -- @
 
-multiMain :: [(String, Diagram Rasterific R2)] -> IO ()
+multiMain :: [(String, Diagram Rasterific V2 Float)] -> IO ()
 multiMain = mainWith
 
-instance Mainable [(String,Diagram Rasterific R2)] where
-    type MainOpts [(String,Diagram Rasterific R2)]
-        = (MainOpts (Diagram Rasterific R2), DiagramMultiOpts)
+instance Mainable [(String,Diagram Rasterific V2 Float)] where
+    type MainOpts [(String,Diagram Rasterific V2 Float)]
+        = (MainOpts (Diagram Rasterific V2 Float), DiagramMultiOpts)
 
     mainRender = defaultMultiMainRender
 
@@ -168,16 +168,16 @@ instance Mainable [(String,Diagram Rasterific R2)] where
 --
 -- The @--fpu@ option can be used to control how many frames will be
 -- output for each second (unit time) of animation.
-animMain :: Animation Rasterific R2 -> IO ()
+animMain :: Animation Rasterific V2 Float -> IO ()
 animMain = mainWith
 
-instance Mainable (Animation Rasterific R2) where
-    type MainOpts (Animation Rasterific R2) =
+instance Mainable (Animation Rasterific V2 Float) where
+    type MainOpts (Animation Rasterific V2 Float) =
       ((DiagramOpts, DiagramAnimOpts), DiagramLoopOpts)
 
     mainRender (opts, l) d = defaultAnimMainRender chooseRender output opts d >> defaultLoopRender l
 
-gifMain :: [(Diagram Rasterific R2, GifDelay)] -> IO ()
+gifMain :: [(Diagram Rasterific V2 Float, GifDelay)] -> IO ()
 gifMain = mainWith
 
 -- | Extra options for animated GIFs.
@@ -203,13 +203,13 @@ instance Parseable GifOpts where
                        ( long "loop-repeat"
                       <> help "Number of times to repeat" )
 
-instance Mainable [(Diagram Rasterific R2, GifDelay)] where
-    type MainOpts [(Diagram Rasterific R2, GifDelay)] = (DiagramOpts, GifOpts)
+instance Mainable [(Diagram Rasterific V2 Float, GifDelay)] where
+    type MainOpts [(Diagram Rasterific V2 Float, GifDelay)] = (DiagramOpts, GifOpts)
 
-    mainRender (dOpts, gOpts) ds = gifRender (dOpts, gOpts) ds
+    mainRender = gifRender
 
 encodeGifAnimation' :: [GifDelay] -> GifLooping -> Bool
-                   -> [Image PixelRGB8] -> Either String (L.ByteString)
+                   -> [Image PixelRGB8] -> Either String L.ByteString
 encodeGifAnimation' delays looping dithering lst =
     encodeGifImages looping triples
       where
@@ -223,7 +223,7 @@ writeGifAnimation' :: FilePath -> [GifDelay] -> GifLooping -> Bool
 writeGifAnimation' path delays looping dithering img =
     L.writeFile path <$> encodeGifAnimation' delays looping dithering img
 
-gifRender :: (DiagramOpts, GifOpts) -> [(Diagram Rasterific R2, GifDelay)] -> IO ()
+gifRender :: (DiagramOpts, GifOpts) -> [(Diagram Rasterific V2 Float, GifDelay)] -> IO ()
 gifRender (dOpts, gOpts) lst =
   case splitOn "." (dOpts^.output) of
     [""] -> putStrLn "No output file given"
@@ -246,4 +246,4 @@ gifRender (dOpts, gOpts) lst =
            case result of
              Left s   -> putStrLn s
              Right io -> io
-       | otherwise -> putStrLn $ "File name must end with .gif"
+       | otherwise -> putStrLn "File name must end with .gif"
