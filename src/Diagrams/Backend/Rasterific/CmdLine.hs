@@ -93,17 +93,17 @@ import           Control.Lens                 ((^.), makeLenses)
 import           Data.List.Split
 
 
-defaultMain :: Diagram Rasterific V2 Float -> IO ()
+defaultMain :: QDiagram Rasterific V2 Float Any -> IO ()
 defaultMain = mainWith
 
-instance Mainable (Diagram Rasterific V2 Float) where
-    type MainOpts (Diagram Rasterific V2 Float) = (DiagramOpts, DiagramLoopOpts)
+instance Mainable (QDiagram Rasterific V2 Float Any) where
+    type MainOpts (QDiagram Rasterific V2 Float Any) = (DiagramOpts, DiagramLoopOpts)
 
     mainRender (opts,loopOpts) d = do
         chooseRender opts d
         defaultLoopRender loopOpts
 
-chooseRender :: DiagramOpts -> Diagram Rasterific V2 Float -> IO ()
+chooseRender :: DiagramOpts -> QDiagram Rasterific V2 Float Any -> IO ()
 chooseRender opts d =
   case splitOn "." (opts ^. output) of
     [""] -> putStrLn "No output file given."
@@ -143,12 +143,12 @@ chooseRender opts d =
 -- $ ./MultiTest --selection bar -o Bar.png -w 200
 -- @
 
-multiMain :: [(String, Diagram Rasterific V2 Float)] -> IO ()
+multiMain :: [(String, QDiagram Rasterific V2 Float Any)] -> IO ()
 multiMain = mainWith
 
-instance Mainable [(String,Diagram Rasterific V2 Float)] where
-    type MainOpts [(String,Diagram Rasterific V2 Float)]
-        = (MainOpts (Diagram Rasterific V2 Float), DiagramMultiOpts)
+instance Mainable [(String,QDiagram Rasterific V2 Float Any)] where
+    type MainOpts [(String,QDiagram Rasterific V2 Float Any)]
+        = (MainOpts (QDiagram Rasterific V2 Float Any), DiagramMultiOpts)
 
     mainRender = defaultMultiMainRender
 
@@ -177,7 +177,7 @@ instance Mainable (Animation Rasterific V2 Float) where
 
     mainRender (opts, l) d = defaultAnimMainRender chooseRender output opts d >> defaultLoopRender l
 
-gifMain :: [(Diagram Rasterific V2 Float, GifDelay)] -> IO ()
+gifMain :: [(QDiagram Rasterific V2 Float Any, GifDelay)] -> IO ()
 gifMain = mainWith
 
 -- | Extra options for animated GIFs.
@@ -203,8 +203,8 @@ instance Parseable GifOpts where
                        ( long "loop-repeat"
                       <> help "Number of times to repeat" )
 
-instance Mainable [(Diagram Rasterific V2 Float, GifDelay)] where
-    type MainOpts [(Diagram Rasterific V2 Float, GifDelay)] = (DiagramOpts, GifOpts)
+instance Mainable [(QDiagram Rasterific V2 Float Any, GifDelay)] where
+    type MainOpts [(QDiagram Rasterific V2 Float Any, GifDelay)] = (DiagramOpts, GifOpts)
 
     mainRender = gifRender
 
@@ -223,7 +223,7 @@ writeGifAnimation' :: FilePath -> [GifDelay] -> GifLooping -> Bool
 writeGifAnimation' path delays looping dithering img =
     L.writeFile path <$> encodeGifAnimation' delays looping dithering img
 
-gifRender :: (DiagramOpts, GifOpts) -> [(Diagram Rasterific V2 Float, GifDelay)] -> IO ()
+gifRender :: (DiagramOpts, GifOpts) -> [(QDiagram Rasterific V2 Float Any, GifDelay)] -> IO ()
 gifRender (dOpts, gOpts) lst =
   case splitOn "." (dOpts^.output) of
     [""] -> putStrLn "No output file given"

@@ -136,6 +136,9 @@ data Rasterific = Rasterific
 
 type B = Rasterific
 
+type instance V Rasterific = V2
+type instance N Rasterific = Float
+
 data RasterificState =
   RasterificState { _accumStyle :: Style V2 Float
                     -- ^ The current accumulated style.
@@ -453,7 +456,7 @@ writeJpeg quality outFile img = L.writeFile outFile bs
   where
     bs = encodeJpegAtQuality quality (pixelMap (convertPixel . dropTransparency) img)
 
-renderRasterific :: FilePath -> SizeSpec2D Float -> Word8 -> Diagram Rasterific V2 Float -> IO ()
+renderRasterific :: FilePath -> SizeSpec2D Float -> Word8 -> QDiagram Rasterific V2 Float Any -> IO ()
 renderRasterific outFile szSpec quality d = writer outFile img
   where
     writer = case takeExtension outFile of
