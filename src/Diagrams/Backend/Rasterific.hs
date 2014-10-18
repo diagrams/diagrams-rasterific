@@ -89,7 +89,6 @@ import           Diagrams.Prelude            hiding (opacity, view)
 import           Diagrams.TwoD.Adjust        (adjustDia2D)
 import           Diagrams.TwoD.Attributes    (splitTextureFills)
 import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule)
-import           Diagrams.TwoD.Size          (sizePair)
 import           Diagrams.TwoD.Text          hiding (Font)
 
 import           Codec.Picture
@@ -136,6 +135,9 @@ data Rasterific = Rasterific
 
 type B = Rasterific
 
+type instance V Rasterific = V2
+type instance N Rasterific = Float
+
 data RasterificState =
   RasterificState { _accumStyle :: Style V2 Float
                     -- ^ The current accumulated style.
@@ -166,7 +168,7 @@ instance Backend Rasterific V2 Float where
   data Render  Rasterific V2 Float = R (RenderM ())
   type Result  Rasterific V2 Float = Image PixelRGBA8
   data Options Rasterific V2 Float = RasterificOptions
-          { _sizeSpec  :: SizeSpec2D Float -- ^ The requested size of the output
+          { _sizeSpec  :: SizeSpec V2 Float -- ^ The requested size of the output
           }
     deriving Show
 
@@ -174,7 +176,7 @@ instance Backend Rasterific V2 Float where
     R.renderDrawing (round w) (round h) bgColor r
     where
       r       = runRenderM . runR . toRender $ t
-      (w,h)   = sizePair (opts^.sizeSpec)
+      V2 w h  = getSize 100 (opts^.sizeSpec)
       bgColor = PixelRGBA8 0 0 0 0
 
   adjustDia c opts d = adjustDia2D sizeSpec c opts (d # reflectY # fontSizeO 12)
@@ -203,7 +205,7 @@ instance Monoid (Render Rasterific V2 Float) where
   mempty = R $ return ()
   (R rd1) `mappend` (R rd2) = R (rd1 >> rd2)
 
-sizeSpec :: Lens' (Options Rasterific V2 Float) (SizeSpec2D Float)
+sizeSpec :: Lens' (Options Rasterific V2 Float) (SizeSpec V2 Float)
 sizeSpec = lens (\(RasterificOptions {_sizeSpec = s}) -> s)
                      (\o s -> o {_sizeSpec = s})
 
@@ -212,8 +214,8 @@ rasterificStrokeStyle :: Style v n
 rasterificStrokeStyle s = (strokeWidth, strokeJoin, strokeCaps, strokeDash)
   where
     strokeWidth = case getLineWidth <$> getAttr s of
-                      Just o ->  fromOutput o
-                      _               ->  1
+                      Just o -> o
+                      _    ->  1
     strokeJoin = fromMaybe (R.JoinMiter 0) (fromLineJoin . getLineJoin <$> getAttr s)
     strokeCaps = (strokeCap, strokeCap)
     strokeCap  = fromMaybe (R.CapStraight 0) (fromLineCap . getLineCap <$> getAttr s)
@@ -230,10 +232,7 @@ fromLineJoin LineJoinRound = R.JoinRound
 fromLineJoin LineJoinBevel = R.JoinMiter 1
 
 fromDashing :: Dashing Float -> (R.DashPattern, Float)
-fromDashing (Dashing ds d) = (ds', d')
-  where
-    ds' = map fromOutput ds
-    d' = fromOutput d
+fromDashing (Dashing ds d) = (ds, d)
 
 fromFillRule :: FillRule -> R.FillMethod
 fromFillRule EvenOdd = R.FillEvenOdd
@@ -408,9 +407,8 @@ textBox :: Font -> Int -> String -> (Float, Float)
 textBox f = stringBoundingBox f 96
 
 instance Renderable (Text Float) Rasterific where
-  render _ (Text tt tn al str) = R $ do
-    isLocal <- fromMaybe True <$> getStyleAttrib (getFontSizeIsLocal :: FontSize Float -> Bool)
-    fs      <- fromMaybe 12 <$> getStyleAttrib (fromOutput . getFontSize :: FontSize Float -> Float)
+  render _ (Text tr al str) = R $ do
+    fs      <- fromMaybe 12 <$> getStyleAttrib (getFontSize :: FontSize Float -> Float)
     slant   <- fromMaybe FontSlantNormal <$> getStyleAttrib getFontSlant
     fw      <- fromMaybe FontWeightNormal <$> getStyleAttrib getFontWeight
     f       <- fromMaybe (SC (SomeColor (black :: Colour Double))) 
@@ -423,7 +421,6 @@ instance Renderable (Text Float) Rasterific where
         (refX, refY) = case al of
           BaselineText -> (0, y)
           BoxAlignedText xt yt -> (x * xt, (1 - yt) * y)
-        tr = if isLocal then tt else tn
         p = rasterificPtTransf (moveOriginBy (r2 (refX, refY)) mempty) (R.V2 0 0)
     liftR (R.withTransformation (rasterificMatTransf (tr <> reflectionY))
           (R.withTexture fColor $ R.printTextAt fnt fs' p str))
@@ -453,8 +450,8 @@ writeJpeg quality outFile img = L.writeFile outFile bs
   where
     bs = encodeJpegAtQuality quality (pixelMap (convertPixel . dropTransparency) img)
 
-renderRasterific :: FilePath -> SizeSpec2D Float -> Word8 -> Diagram Rasterific V2 Float -> IO ()
-renderRasterific outFile szSpec quality d = writer outFile img
+renderRasterific :: FilePath -> SizeSpec V2 Float -> Word8 -> Diagram Rasterific -> IO ()
+renderRasterific outFile spec quality d = writer outFile img
   where
     writer = case takeExtension outFile of
               ".png" -> writePng
@@ -462,6 +459,6 @@ renderRasterific outFile szSpec quality d = writer outFile img
               ".bmp" -> writeBitmap
               ".jpg" -> writeJpeg q
               _      -> writePng
-    img = renderDia Rasterific (RasterificOptions szSpec) d
+    img = renderDia Rasterific (RasterificOptions spec) d
     q = max quality 100
 
