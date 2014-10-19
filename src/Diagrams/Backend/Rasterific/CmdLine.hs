@@ -110,7 +110,7 @@ chooseRender opts d =
     ps | last ps `elem` ["png", "tif", "bmp", "jpg"] -> do
            let img = renderDia Rasterific
                         ( RasterificOptions
-                          (fromIntegral <$> mkSpec (V2 (opts^.width) (opts^.height)))
+                          (fromIntegral <$> mkSizeSpec2D (opts^.width) (opts^.height))
                         )
                         d
            case last ps of
@@ -232,7 +232,7 @@ gifRender (dOpts, gOpts) lst =
                                 Just n  -> LoopingRepeat (fromIntegral n)
                dias = map fst lst
                delays = map snd lst
-               spec = fromIntegral <$> mkSpec (V2 (dOpts^.width) (dOpts^.height))
+               spec = fromIntegral <$> mkSizeSpec2D (dOpts^.width) (dOpts^.height)
                opts = RasterificOptions spec
                imageRGB8s = map (pixelMap dropTransparency
                                . renderDia Rasterific opts) dias

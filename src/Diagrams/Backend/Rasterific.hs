@@ -176,7 +176,7 @@ instance Backend Rasterific V2 Float where
     R.renderDrawing (round w) (round h) bgColor r
     where
       r       = runRenderM . runR . toRender $ t
-      V2 w h  = getSize 100 (opts^.sizeSpec)
+      V2 w h  = specToSize 100 (opts^.sizeSpec)
       bgColor = PixelRGBA8 0 0 0 0
 
   adjustDia c opts d = adjustDia2D sizeSpec c opts (d # reflectY # fontSizeO 12)
