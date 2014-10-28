@@ -93,7 +93,11 @@ import           Control.Lens                 ((^.), makeLenses)
 import           Data.List.Split
 
 
+<<<<<<< HEAD
 defaultMain :: Diagram Rasterific -> IO ()
+=======
+defaultMain :: QDiagram Rasterific V2 Float Any -> IO ()
+>>>>>>> master
 defaultMain = mainWith
 
 instance Mainable (QDiagram Rasterific V2 Float Any) where
@@ -103,7 +107,11 @@ instance Mainable (QDiagram Rasterific V2 Float Any) where
         chooseRender opts d
         defaultLoopRender loopOpts
 
+<<<<<<< HEAD
 chooseRender :: DiagramOpts -> Diagram Rasterific -> IO ()
+=======
+chooseRender :: DiagramOpts -> QDiagram Rasterific V2 Float Any -> IO ()
+>>>>>>> master
 chooseRender opts d =
   case splitOn "." (opts ^. output) of
     [""] -> putStrLn "No output file given."
@@ -140,11 +148,19 @@ chooseRender opts d =
 -- $ ./MultiTest --selection bar -o Bar.png -w 200
 -- @
 
+<<<<<<< HEAD
 multiMain :: [(String, Diagram Rasterific)] -> IO ()
 multiMain = mainWith
 
 instance Mainable [(String, QDiagram Rasterific V2 Float Any)] where
     type MainOpts [(String, QDiagram Rasterific V2 Float Any)]
+=======
+multiMain :: [(String, QDiagram Rasterific V2 Float Any)] -> IO ()
+multiMain = mainWith
+
+instance Mainable [(String,QDiagram Rasterific V2 Float Any)] where
+    type MainOpts [(String,QDiagram Rasterific V2 Float Any)]
+>>>>>>> master
         = (MainOpts (QDiagram Rasterific V2 Float Any), DiagramMultiOpts)
 
     mainRender = defaultMultiMainRender
@@ -174,7 +190,11 @@ instance Mainable (Animation Rasterific V2 Float) where
 
     mainRender (opts, l) d = defaultAnimMainRender chooseRender output opts d >> defaultLoopRender l
 
+<<<<<<< HEAD
 gifMain :: [(Diagram Rasterific, GifDelay)] -> IO ()
+=======
+gifMain :: [(QDiagram Rasterific V2 Float Any, GifDelay)] -> IO ()
+>>>>>>> master
 gifMain = mainWith
 
 -- | Extra options for animated GIFs.
@@ -220,7 +240,11 @@ writeGifAnimation' :: FilePath -> [GifDelay] -> GifLooping -> Bool
 writeGifAnimation' path delays looping dithering img =
     L.writeFile path <$> encodeGifAnimation' delays looping dithering img
 
+<<<<<<< HEAD
 gifRender :: (DiagramOpts, GifOpts) -> [(Diagram Rasterific, GifDelay)] -> IO ()
+=======
+gifRender :: (DiagramOpts, GifOpts) -> [(QDiagram Rasterific V2 Float Any, GifDelay)] -> IO ()
+>>>>>>> master
 gifRender (dOpts, gOpts) lst =
   case splitOn "." (dOpts^.output) of
     [""] -> putStrLn "No output file given"

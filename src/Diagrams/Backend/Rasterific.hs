@@ -38,31 +38,31 @@
 --   'Diagrams.Core.Types.Backend' instance for @Rasterific@.  In particular,
 --   'Diagrams.Core.Types.renderDia' has the generic type
 --
--- > renderDia :: b -> Options b v -> QDiagram b v m -> Result b v
+-- > renderDia :: b -> Options b v n -> QDiagram b v n m -> Result b v n
 --
 -- (omitting a few type class constraints).  @b@ represents the
--- backend type, @v@ the vector space, and @m@ the type of monoidal
--- query annotations on the diagram.  'Options' and 'Result' are
+-- backend type, @v@ the vector space, @n@ the numeric field, and @m@ the type
+-- of monoidal query annotations on the diagram.  'Options' and 'Result' are
 -- associated data and type families, respectively, which yield the
 -- type of option records and rendering results specific to any
--- particular backend.  For @b ~ Rasterific@ and @v ~ R2@, we have
+-- particular backend.  For @b ~ Rasterific@, @v ~ V2@, and @n ~ Float@, we have
 --
--- > data Options Rasterific R2 = RasterificOptions
--- >          { _size      :: SizeSpec2D -- ^ The requested size of the output
+-- > data Options Rasterific V2 Float = RasterificOptions
+-- >          { _size      :: SizeSpec2D Float -- ^ The requested size of the output
 -- >          }
 --
 -- @
--- data family Render Rasterific R2 = 'R (RenderM ())'
+-- data family Render Rasterific V2 Float = 'R (RenderM ())'
 -- @
 --
 -- @
--- type family Result Rasterific R2 = 'Image PixelRGBA8'
+-- type family Result Rasterific V2 Float = 'Image PixelRGBA8'
 -- @
 --
 -- So the type of 'renderDia' resolves to
 --
 -- @
--- renderDia :: Rasterific -> Options Rasterific R2 -> QDiagram Rasterific R2 m -> 'Image PixelRGBA8'
+-- renderDia :: Rasterific -> Options Rasterific V2 Float -> QDiagram Rasterific V2 Float m -> 'Image PixelRGBA8'
 -- @
 --
 -- which you could call like @renderDia Rasterific (RasterificOptions (Width 250))
@@ -450,8 +450,13 @@ writeJpeg quality outFile img = L.writeFile outFile bs
   where
     bs = encodeJpegAtQuality quality (pixelMap (convertPixel . dropTransparency) img)
 
+<<<<<<< HEAD
 renderRasterific :: FilePath -> SizeSpec V2 Float -> Word8 -> Diagram Rasterific -> IO ()
 renderRasterific outFile spec quality d = writer outFile img
+=======
+renderRasterific :: FilePath -> SizeSpec2D Float -> Word8 -> QDiagram Rasterific V2 Float Any -> IO ()
+renderRasterific outFile szSpec quality d = writer outFile img
+>>>>>>> master
   where
     writer = case takeExtension outFile of
               ".png" -> writePng
