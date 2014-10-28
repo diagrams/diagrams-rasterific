@@ -456,8 +456,8 @@ writeJpeg quality outFile img = L.writeFile outFile bs
   where
     bs = encodeJpegAtQuality quality (pixelMap (convertPixel . dropTransparency) img)
 
-renderRasterific :: FilePath -> SizeSpec2D Float -> Word8 -> QDiagram Rasterific V2 Float Any -> IO ()
-renderRasterific outFile szSpec quality d = writer outFile img
+renderRasterific :: FilePath -> SizeSpec V2 Float -> Word8 -> Diagram Rasterific -> IO ()		
+renderRasterific outFile spec quality d = writer outFile img		
   where
     writer = case takeExtension outFile of
               ".png" -> writePng
