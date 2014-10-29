@@ -174,11 +174,8 @@ instance Mainable (Animation Rasterific V2 Float) where
 
     mainRender (opts, l) d = defaultAnimMainRender chooseRender output opts d >> defaultLoopRender l
 
-<<<<<<< HEAD
+
 gifMain :: [(Diagram Rasterific, GifDelay)] -> IO ()
-=======
-gifMain :: [(QDiagram Rasterific V2 Float Any, GifDelay)] -> IO ()
->>>>>>> master
 gifMain = mainWith
 
 -- | Extra options for animated GIFs.
@@ -224,7 +221,7 @@ writeGifAnimation' :: FilePath -> [GifDelay] -> GifLooping -> Bool
 writeGifAnimation' path delays looping dithering img =
     L.writeFile path <$> encodeGifAnimation' delays looping dithering img
 
-gifRender :: (DiagramOpts, GifOpts) -> [(QDiagram Rasterific V2 Float Any, GifDelay)] -> IO ()
+gifRender :: (DiagramOpts, GifOpts) -> [(Diagram Rasterific, GifDelay)] -> IO ()
 gifRender (dOpts, gOpts) lst =
   case splitOn "." (dOpts^.output) of
     [""] -> putStrLn "No output file given"
