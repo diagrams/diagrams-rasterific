@@ -77,7 +77,7 @@ module Diagrams.Backend.Rasterific.CmdLine
        ) where
 
 import           Diagrams.Prelude              hiding (width, height, interval
-                                              ,option, (<>))
+                                              ,option, (<>), output)
 import           Diagrams.Backend.Rasterific
 import           Diagrams.Backend.CmdLine
 
@@ -110,10 +110,7 @@ chooseRender opts d =
     ps | last ps `elem` ["png", "tif", "bmp", "jpg"] -> do
            let img = renderDia Rasterific
                         ( RasterificOptions
-                          (mkSizeSpec
-                             (fromIntegral <$> opts ^. width )
-                             (fromIntegral <$> opts ^. height)
-                          )
+                          (fromIntegral <$> mkSizeSpec2D (opts^.width) (opts^.height))
                         )
                         d
            case last ps of
@@ -177,7 +174,8 @@ instance Mainable (Animation Rasterific V2 Float) where
 
     mainRender (opts, l) d = defaultAnimMainRender chooseRender output opts d >> defaultLoopRender l
 
-gifMain :: [(QDiagram Rasterific V2 Float Any, GifDelay)] -> IO ()
+
+gifMain :: [(Diagram Rasterific, GifDelay)] -> IO ()
 gifMain = mainWith
 
 -- | Extra options for animated GIFs.
@@ -223,7 +221,7 @@ writeGifAnimation' :: FilePath -> [GifDelay] -> GifLooping -> Bool
 writeGifAnimation' path delays looping dithering img =
     L.writeFile path <$> encodeGifAnimation' delays looping dithering img
 
-gifRender :: (DiagramOpts, GifOpts) -> [(QDiagram Rasterific V2 Float Any, GifDelay)] -> IO ()
+gifRender :: (DiagramOpts, GifOpts) -> [(Diagram Rasterific, GifDelay)] -> IO ()
 gifRender (dOpts, gOpts) lst =
   case splitOn "." (dOpts^.output) of
     [""] -> putStrLn "No output file given"
@@ -235,9 +233,8 @@ gifRender (dOpts, gOpts) lst =
                                 Just n  -> LoopingRepeat (fromIntegral n)
                dias = map fst lst
                delays = map snd lst
-               sizeSpec = mkSizeSpec (fromIntegral <$> dOpts^.width)
-                                 (fromIntegral <$> dOpts^.height)
-               opts = RasterificOptions sizeSpec
+               spec = fromIntegral <$> mkSizeSpec2D (dOpts^.width) (dOpts^.height)
+               opts = RasterificOptions spec
                imageRGB8s = map (pixelMap dropTransparency
                                . renderDia Rasterific opts) dias
                result = writeGifAnimation' (dOpts^.output) delays
