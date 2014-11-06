@@ -460,5 +460,5 @@ renderRasterific outFile spec quality d = writer outFile img
               ".jpg" -> writeJpeg q
               _      -> writePng
     img = renderDia Rasterific (RasterificOptions spec) d
-    q = max quality 100
+    q = min quality 100
 
