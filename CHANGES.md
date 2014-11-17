@@ -1,3 +1,8 @@
+0.1.0.5 (07 December 2014)
+
+- Allow `Rasterific-0.4`
+- Allow `FontyFruity-0.4`
+
 0.1.0.4 (17 November 2014)
 --------------------------
 
