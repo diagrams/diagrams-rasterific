@@ -33,7 +33,7 @@ library
                        Rasterific >= 0.2 && < 0.4,
                        FontyFruity >= 0.2 && < 0.4,
                        JuicyPixels >= 3.1.5 && < 3.2,
-                       lens >= 4.0 && < 4.5,
+                       lens >= 4.0 && < 4.7,
                        mtl >= 2.1 && < 2.3,
                        statestack >= 0.2 && < 0.3,
                        data-default-class >= 0.0 && < 0.1,
