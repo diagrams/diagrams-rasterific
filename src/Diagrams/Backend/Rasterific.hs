@@ -115,6 +115,7 @@ import           Control.Monad.Trans         (lift)
 import qualified Data.ByteString.Lazy as L   (writeFile)
 import           Data.Default.Class
 import qualified Data.Foldable               as F
+import           Data.Hashable               (Hashable(..))
 import           Data.Maybe                  (fromMaybe, isJust, fromJust)
 import           Data.Tree
 import           Data.Typeable
@@ -204,6 +205,9 @@ runR (R r) = r
 instance Monoid (Render Rasterific V2 Float) where
   mempty = R $ return ()
   (R rd1) `mappend` (R rd2) = R (rd1 >> rd2)
+
+instance Hashable (Options Rasterific V2 Float) where
+  hashWithSalt s (RasterificOptions sz) = s `hashWithSalt` sz
 
 sizeSpec :: Lens' (Options Rasterific V2 Float) (SizeSpec V2 Float)
 sizeSpec = lens (\(RasterificOptions {_sizeSpec = s}) -> s)
