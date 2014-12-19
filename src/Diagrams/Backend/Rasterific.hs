@@ -90,6 +90,7 @@ import           Diagrams.TwoD.Adjust        (adjustDia2D)
 import           Diagrams.TwoD.Attributes    (splitTextureFills)
 import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule)
 import           Diagrams.TwoD.Text          hiding (Font)
+import           Diagrams.Backend.Build
 
 import           Codec.Picture
 import           Codec.Picture.Types         (dropTransparency, convertPixel
@@ -181,6 +182,11 @@ instance Backend Rasterific V2 Float where
       bgColor = PixelRGBA8 0 0 0 0
 
   adjustDia c opts d = adjustDia2D sizeSpec c opts (d # reflectY # fontSizeO 12)
+
+instance BackendBuild Rasterific V2 Float where
+  outputSize           = sizeSpec
+  saveDia outFile opts = renderRasterific outFile (opts^.sizeSpec) 80
+
 
 toRender :: RTree Rasterific V2 Float a -> Render Rasterific V2 Float
 toRender = fromRTree
@@ -356,7 +362,7 @@ mkStroke l j c d  primList =
 instance Renderable (Path V2 Float) Rasterific where
   render _ p = R $ do
     f <- getStyleAttrib getFillTexture
-    s <- fromMaybe (SC (SomeColor (black :: Colour Double))) 
+    s <- fromMaybe (SC (SomeColor (black :: Colour Double)))
          <$> getStyleAttrib getLineTexture
     o <- fromMaybe 1 <$> getStyleAttrib getOpacity
     r <- fromMaybe Winding <$> getStyleAttrib getFillRule
@@ -415,7 +421,7 @@ instance Renderable (Text Float) Rasterific where
     fs      <- fromMaybe 12 <$> getStyleAttrib (getFontSize :: FontSize Float -> Float)
     slant   <- fromMaybe FontSlantNormal <$> getStyleAttrib getFontSlant
     fw      <- fromMaybe FontWeightNormal <$> getStyleAttrib getFontWeight
-    f       <- fromMaybe (SC (SomeColor (black :: Colour Double))) 
+    f       <- fromMaybe (SC (SomeColor (black :: Colour Double)))
                <$> getStyleAttrib getFillTexture
     o       <- fromMaybe 1 <$> getStyleAttrib getOpacity
     let fColor = rasterificTexture f o
@@ -446,7 +452,7 @@ instance Renderable (DImage Float Embedded) Rasterific where
     where
       ImageRaster dImg = iD
       img = toImageRGBA8 dImg
-      trl = moveOriginBy (r2 (fromIntegral w / 2, fromIntegral h / 2)) mempty 
+      trl = moveOriginBy (r2 (fromIntegral w / 2, fromIntegral h / 2)) mempty
       p   = rasterificPtTransf trl (R.V2 0 0)
 
 writeJpeg :: Word8 -> FilePath -> Result Rasterific V2 Float -> IO ()
@@ -454,8 +460,8 @@ writeJpeg quality outFile img = L.writeFile outFile bs
   where
     bs = encodeJpegAtQuality quality (pixelMap (convertPixel . dropTransparency) img)
 
-renderRasterific :: FilePath -> SizeSpec V2 Float -> Word8 -> Diagram Rasterific -> IO ()		
-renderRasterific outFile spec quality d = writer outFile img		
+renderRasterific :: FilePath -> SizeSpec V2 Float -> Word8 -> Diagram Rasterific -> IO ()
+renderRasterific outFile spec quality d = writer outFile img
   where
     writer = case takeExtension outFile of
               ".png" -> writePng
@@ -464,5 +470,5 @@ renderRasterific outFile spec quality d = writer outFile img
               ".jpg" -> writeJpeg q
               _      -> writePng
     img = renderDia Rasterific (RasterificOptions spec) d
-    q = min quality 100
+    q   = min quality 100
 
