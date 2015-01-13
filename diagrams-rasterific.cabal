@@ -1,5 +1,5 @@
 name:                diagrams-rasterific
-version:             0.1.0.5
+version:             0.1.0.6
 synopsis:            Rasterific backend for diagrams.
 description:         A full-featured backend for rendering
                      diagrams using the Rasterific rendering engine.
