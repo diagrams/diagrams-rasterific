@@ -1,4 +1,10 @@
+0.1.0.6 (13 Jan 2015)
+---------------------
+
+- Allow `lens-4.7`
+
 0.1.0.5 (07 December 2014)
+--------------------------
 
 - Allow `Rasterific-0.4`
 - Allow `FontyFruity-0.4`
