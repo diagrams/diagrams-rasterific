@@ -180,7 +180,7 @@ instance Backend Rasterific V2 Float where
       V2 w h  = specToSize 100 (opts^.sizeSpec)
       bgColor = PixelRGBA8 0 0 0 0
 
-  adjustDia c opts d = adjustDia2D sizeSpec c opts (d # reflectY # fontSizeO 12)
+  adjustDia c opts d = adjustDia2D sizeSpec c opts (d # reflectY)
 
 toRender :: RTree Rasterific V2 Float a -> Render Rasterific V2 Float
 toRender = fromRTree
