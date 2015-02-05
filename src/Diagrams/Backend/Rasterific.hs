@@ -419,7 +419,7 @@ instance Renderable (Text Float) Rasterific where
                <$> getStyleAttrib getFillTexture
     o       <- fromMaybe 1 <$> getStyleAttrib getOpacity
     let fColor = rasterificTexture f o
-        fs' = round fs
+        fs' = R.PointSize fs
         fnt = fromFontStyle slant fw
         (x, y) = textBox fnt fs' str
         (refX, refY) = case al of
