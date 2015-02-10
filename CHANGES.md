@@ -1,3 +1,8 @@
+0.1.0.7 (Feb 10 2015)
+
+  - Allow 'Fontyfruity-0.5'
+  - Allow 'Rasterific-0.5'
+  
 0.1.0.6 (13 Jan 2015)
 ---------------------
 

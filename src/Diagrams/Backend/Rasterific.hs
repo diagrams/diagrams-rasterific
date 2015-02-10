@@ -107,7 +107,7 @@ import           Graphics.Rasterific.Texture (uniformTexture, Gradient
 
 import qualified Graphics.Rasterific.Transformations as R
 
-import           Graphics.Text.TrueType      (loadFontFile, Font, stringBoundingBox)
+import           Graphics.Text.TrueType
 
 
 import           Control.Lens                hiding (transform, ( # ))
@@ -411,10 +411,11 @@ fromFontStyle FontSlantItalic FontWeightNormal = openSansItalic
 fromFontStyle FontSlantOblique FontWeightNormal = openSansItalic
 fromFontStyle _ _ = openSansRegular
 
-textBox :: Font -> Int -> String -> (Double, Double)
+textBox :: Font -> R.PointSize -> String -> (Double, Double)
 textBox f ps str = (float2Double w, float2Double h)
   where
-    (w, h) = stringBoundingBox f 96 ps str
+    bb     = stringBoundingBox f 96 ps str
+    (w, h) = (_xMax bb - _xMin bb, _yMax bb - _yMin bb)
 
 instance Renderable Text Rasterific where
   render _ (Text tt tn al str) = R $ do
@@ -426,7 +427,7 @@ instance Renderable Text Rasterific where
                <$> getStyleAttrib getFillTexture
     o       <- fromMaybe 1 <$> getStyleAttrib getOpacity
     let fColor = rasterificTexture f o
-        fs' = round fs
+        fs' = R.PointSize  . double2Float $ fs
         fnt = fromFontStyle slant fw
         (x, y) = textBox fnt fs' str
         (refX, refY) = case al of
