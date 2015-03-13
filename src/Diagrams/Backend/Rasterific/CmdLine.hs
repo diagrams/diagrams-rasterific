@@ -88,7 +88,6 @@ import           Codec.Picture.ColorQuant     (defaultPaletteOptions)
 import qualified Data.ByteString.Lazy as L    (ByteString, writeFile)
 
 import           Options.Applicative
-import           Control.Lens                 ((^.), makeLenses)
 
 import           Data.List.Split
 

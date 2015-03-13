@@ -106,14 +106,12 @@ import qualified Graphics.Rasterific.Transformations as R
 import           Graphics.Text.TrueType
 
 
-import           Control.Lens                hiding (transform, ( # ))
 import           Control.Monad               (when)
 import           Control.Monad.StateStack
 import           Control.Monad.Trans         (lift)
 
 
 import qualified Data.ByteString.Lazy as L   (writeFile)
-import           Data.Default.Class
 import qualified Data.Foldable               as F
 import           Data.Hashable               (Hashable(..))
 import           Data.Maybe                  (fromMaybe, isJust, fromJust)
