@@ -8,7 +8,6 @@
 {-# LANGUAGE TemplateHaskell           #-}
 {-# LANGUAGE TypeFamilies              #-}
 {-# LANGUAGE TypeSynonymInstances      #-}
-{-# LANGUAGE ViewPatterns              #-}
 
 -------------------------------------------------------------------------------
 -- |
@@ -82,46 +81,50 @@ module Diagrams.Backend.Rasterific
   ) where
 
 import           Diagrams.Core.Compile
-import           Diagrams.Core.Transform     (matrixHomRep)
+import           Diagrams.Core.Transform             (matrixHomRep)
 
 
-import           Diagrams.Prelude            hiding (opacity, view)
-import           Diagrams.TwoD.Adjust        (adjustDia2D)
-import           Diagrams.TwoD.Attributes    (splitTextureFills)
-import           Diagrams.TwoD.Path          (Clip (Clip), getFillRule)
-import           Diagrams.TwoD.Text          hiding (Font)
+import           Diagrams.Prelude                    hiding (opacity, view)
+import           Diagrams.TwoD.Adjust                (adjustDia2D)
+import           Diagrams.TwoD.Attributes            (splitTextureFills)
+import           Diagrams.TwoD.Path                  (Clip (Clip), getFillRule)
+import           Diagrams.TwoD.Text                  hiding (Font)
 
 import           Codec.Picture
-import           Codec.Picture.Types         (dropTransparency, convertPixel
-                                             ,promoteImage, convertImage)
+import           Codec.Picture.Types                 (convertImage,
+                                                      convertPixel,
+                                                      dropTransparency,
+                                                      promoteImage)
 
-import qualified Graphics.Rasterific         as R
-import           Graphics.Rasterific.Texture (uniformTexture, Gradient
-                                             ,linearGradientTexture ,withSampler
-                                             ,radialGradientWithFocusTexture
-                                             ,transformTexture)
+import qualified Graphics.Rasterific                 as R
+import           Graphics.Rasterific.Texture         (Gradient,
+                                                      linearGradientTexture, radialGradientWithFocusTexture,
+                                                      transformTexture,
+                                                      uniformTexture,
+                                                      withSampler)
 
 import qualified Graphics.Rasterific.Transformations as R
 
 import           Graphics.Text.TrueType
 
 
-import           Control.Monad               (when)
+import           Control.Monad                       (when)
 import           Control.Monad.StateStack
-import           Control.Monad.Trans         (lift)
+import           Control.Monad.Trans                 (lift)
 
 
-import qualified Data.ByteString.Lazy as L   (writeFile)
-import qualified Data.Foldable               as F
-import           Data.Hashable               (Hashable(..))
-import           Data.Maybe                  (fromMaybe, isJust, fromJust)
+import qualified Data.ByteString.Lazy                as L (writeFile)
+import qualified Data.Foldable                       as F
+import           Data.Hashable                       (Hashable (..))
+import           Data.Maybe                          (fromJust, fromMaybe,
+                                                      isJust)
 import           Data.Tree
 import           Data.Typeable
-import           Data.Word                   (Word8)
+import           Data.Word                           (Word8)
 
-import           System.FilePath             (takeExtension)
-import           System.IO.Unsafe            (unsafePerformIO)
-import           Paths_diagrams_rasterific   (getDataFileName)
+import           Paths_diagrams_rasterific           (getDataFileName)
+import           System.FilePath                     (takeExtension)
+import           System.IO.Unsafe                    (unsafePerformIO)
 
 --------------------------------------------------------------------------------
 -- | This data declaration is simply used as a token to distinguish
@@ -354,7 +357,7 @@ mkStroke l j c d  primList =
 instance Renderable (Path V2 Float) Rasterific where
   render _ p = R $ do
     f <- getStyleAttrib getFillTexture
-    s <- fromMaybe (SC (SomeColor (black :: Colour Double))) 
+    s <- fromMaybe (SC (SomeColor (black :: Colour Double)))
          <$> getStyleAttrib getLineTexture
     o <- fromMaybe 1 <$> getStyleAttrib getOpacity
     r <- fromMaybe Winding <$> getStyleAttrib getFillRule
@@ -415,7 +418,7 @@ instance Renderable (Text Float) Rasterific where
     fs      <- fromMaybe 12 <$> getStyleAttrib (getFontSize :: FontSize Float -> Float)
     slant   <- fromMaybe FontSlantNormal <$> getStyleAttrib getFontSlant
     fw      <- fromMaybe FontWeightNormal <$> getStyleAttrib getFontWeight
-    f       <- fromMaybe (SC (SomeColor (black :: Colour Double))) 
+    f       <- fromMaybe (SC (SomeColor (black :: Colour Double)))
                <$> getStyleAttrib getFillTexture
     o       <- fromMaybe 1 <$> getStyleAttrib getOpacity
     let fColor = rasterificTexture f o
@@ -446,7 +449,7 @@ instance Renderable (DImage Float Embedded) Rasterific where
     where
       ImageRaster dImg = iD
       img = toImageRGBA8 dImg
-      trl = moveOriginBy (r2 (fromIntegral w / 2, fromIntegral h / 2)) mempty 
+      trl = moveOriginBy (r2 (fromIntegral w / 2, fromIntegral h / 2)) mempty
       p   = rasterificPtTransf trl (R.V2 0 0)
 
 writeJpeg :: Word8 -> FilePath -> Result Rasterific V2 Float -> IO ()
@@ -454,8 +457,8 @@ writeJpeg quality outFile img = L.writeFile outFile bs
   where
     bs = encodeJpegAtQuality quality (pixelMap (convertPixel . dropTransparency) img)
 
-renderRasterific :: FilePath -> SizeSpec V2 Float -> Word8 -> Diagram Rasterific -> IO ()		
-renderRasterific outFile spec quality d = writer outFile img		
+renderRasterific :: FilePath -> SizeSpec V2 Float -> Word8 -> Diagram Rasterific -> IO ()
+renderRasterific outFile spec quality d = writer outFile img
   where
     writer = case takeExtension outFile of
               ".png" -> writePng
@@ -465,4 +468,3 @@ renderRasterific outFile spec quality d = writer outFile img
               _      -> writePng
     img = renderDia Rasterific (RasterificOptions spec) d
     q = min quality 100
-

@@ -1,8 +1,8 @@
-{-# LANGUAGE FlexibleInstances    #-}
-{-# LANGUAGE TemplateHaskell      #-}
-{-# LANGUAGE TypeFamilies         #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE TypeFamilies      #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE CPP                  #-}
+{-# LANGUAGE CPP               #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -76,16 +76,16 @@ module Diagrams.Backend.Rasterific.CmdLine
        , B
        ) where
 
-import           Diagrams.Prelude              hiding (width, height, interval
-                                              ,option, (<>), output)
-import           Diagrams.Backend.Rasterific
 import           Diagrams.Backend.CmdLine
+import           Diagrams.Backend.Rasterific
+import           Diagrams.Prelude            hiding (height, interval, option,
+                                              output, width, (<>))
 
 import           Codec.Picture
-import           Codec.Picture.Types          (dropTransparency)
-import           Codec.Picture.ColorQuant     (defaultPaletteOptions)
+import           Codec.Picture.ColorQuant    (defaultPaletteOptions)
+import           Codec.Picture.Types         (dropTransparency)
 
-import qualified Data.ByteString.Lazy as L    (ByteString, writeFile)
+import qualified Data.ByteString.Lazy        as L (ByteString, writeFile)
 
 import           Options.Applicative
 
@@ -178,8 +178,8 @@ gifMain :: [(Diagram Rasterific, GifDelay)] -> IO ()
 gifMain = mainWith
 
 -- | Extra options for animated GIFs.
-data GifOpts = GifOpts { _dither :: Bool
-                       , _noLooping :: Bool
+data GifOpts = GifOpts { _dither     :: Bool
+                       , _noLooping  :: Bool
                        , _loopRepeat :: Maybe Int}
 
 makeLenses ''GifOpts
