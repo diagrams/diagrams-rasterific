@@ -422,12 +422,12 @@ instance Renderable (Text Float) Rasterific where
                <$> getStyleAttrib getFillTexture
     o       <- fromMaybe 1 <$> getStyleAttrib getOpacity
     let fColor = rasterificTexture f o
-        fs' = R.PointSize fs
-        fnt = fromFontStyle slant fw
-        (x, y) = textBox fnt fs' str
+        fs'          = R.PointSize fs
+        fnt          = fromFontStyle slant fw
+        (x, y)       = textBox fnt fs' str
         (refX, refY) = case al of
-          BaselineText -> (0, y)
-          BoxAlignedText xt yt -> (x * xt, (1 - yt) * y)
+          BaselineText         -> (0, 0)
+          BoxAlignedText xt yt -> (x * xt, -y * yt)
         p = rasterificPtTransf (moveOriginBy (r2 (refX, refY)) mempty) (R.V2 0 0)
     liftR (R.withTransformation (rasterificMatTransf (tr <> reflectionY))
           (R.withTexture fColor $ R.printTextAt fnt fs' p str))
