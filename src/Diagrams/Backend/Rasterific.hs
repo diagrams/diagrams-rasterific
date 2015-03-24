@@ -168,7 +168,7 @@ runRenderM = flip evalStateStackT def
 
 -- From Diagrams.Core.Types.
 instance TypeableFloat n => Backend Rasterific V2 n where
-  data Render  Rasterific V2 n = R (RenderM n ())
+  newtype Render  Rasterific V2 n = R (RenderM n ())
   type Result  Rasterific V2 n = Image PixelRGBA8
   data Options Rasterific V2 n = RasterificOptions
           { _sizeSpec  :: SizeSpec V2 n -- ^ The requested size of the output
@@ -193,7 +193,7 @@ toRender = fromRTree
       fromRTree (Node (RPrim p) _) = render Rasterific p
       fromRTree (Node (RStyle sty) rs) = R $ do
         save
-        accumStyle %= (<> sty)
+        accumStyle <>= sty
         aStyle <- use accumStyle
         let R r = F.foldMap fromRTree rs
             m = evalStateStackT r (RasterificState aStyle)
@@ -206,22 +206,19 @@ runR (R r) = r
 
 instance Monoid (Render Rasterific V2 n) where
   mempty = R $ return ()
-  (R rd1) `mappend` (R rd2) = R (rd1 >> rd2)
+  R rd1 `mappend` R rd2 = R (rd1 >> rd2)
 
 instance Hashable n => Hashable (Options Rasterific V2 n) where
   hashWithSalt s (RasterificOptions sz) = s `hashWithSalt` sz
 
 sizeSpec :: Lens' (Options Rasterific V2 n) (SizeSpec V2 n)
-sizeSpec = lens (\(RasterificOptions {_sizeSpec = s}) -> s)
-                     (\o s -> o {_sizeSpec = s})
+sizeSpec = lens _sizeSpec (\o s -> o {_sizeSpec = s})
 
 rasterificStrokeStyle :: TypeableFloat n => Style v n
                      -> (n, R.Join, (R.Cap, R.Cap), Maybe (R.DashPattern, n))
 rasterificStrokeStyle s = (strokeWidth, strokeJoin, strokeCaps, strokeDash)
   where
-    strokeWidth = case getLineWidth <$> getAttr s of
-                      Just o -> o
-                      _      -> 1
+    strokeWidth = fromMaybe 1 $ getLineWidth <$> getAttr s
     strokeJoin = fromMaybe (R.JoinMiter 0) (fromLineJoin . getLineJoin <$> getAttr s)
     strokeCaps = (strokeCap, strokeCap)
     strokeCap  = fromMaybe (R.CapStraight 0) (fromLineCap . getLineCap <$> getAttr s)
@@ -242,7 +239,7 @@ fromDashing (Dashing ds d) = (map realToFrac ds, d)
 
 fromFillRule :: FillRule -> R.FillMethod
 fromFillRule EvenOdd = R.FillEvenOdd
-fromFillRule _ = R.FillWinding
+fromFillRule _        = R.FillWinding
 
 getAttrN :: AttributeClass (a n) => Style v n -> Maybe (a n)
 getAttrN = getAttr
@@ -252,7 +249,7 @@ getStyleAttrib :: AttributeClass a => (a -> b) -> RenderM n (Maybe b)
 getStyleAttrib f = (fmap f . getAttr) <$> use accumStyle
 
 getStyleAttribN :: AttributeClass (a n) => (a n -> b) -> RenderM n (Maybe b)
-getStyleAttribN f = (fmap f . getAttr) <$> use accumStyle
+getStyleAttribN = getStyleAttrib
 
 rasterificColor :: SomeColor -> Double -> PixelRGBA8
 rasterificColor c o = PixelRGBA8 r g b a
@@ -421,7 +418,7 @@ textBox f p s = (_xMax bb - _xMin bb, _yMax bb - _yMin bb)
 
 instance TypeableFloat n => Renderable (Text n) Rasterific where
   render _ (Text tr al str) = R $ do
-    fs      <- fromMaybe 12 <$> getStyleAttrib (getFontSize :: FontSize n -> n)
+    fs      <- fromMaybe 12 <$> getStyleAttribN getFontSize
     slant   <- fromMaybe FontSlantNormal <$> getStyleAttrib getFontSlant
     fw      <- fromMaybe FontWeightNormal <$> getStyleAttrib getFontWeight
     f       <- fromMaybe (solid black) <$> getStyleAttribN getFillTexture
