@@ -314,12 +314,12 @@ r2v2 :: Real n => V2 n -> R.Point
 r2v2 (V2 x y) = R.V2 (realToFrac x) (realToFrac y)
 {-# INLINE r2v2 #-}
 
-rv2 :: (Real n, Fractional n) => Iso' R.Point (V2 n)
-rv2 = iso (\(R.V2 x y) -> V2 (realToFrac x) (realToFrac y)) r2v2
+rv2 :: (Real n, Fractional n) => Iso' R.Point (P2 n)
+rv2 = iso (\(R.V2 x y) -> V2 (realToFrac x) (realToFrac y)) r2v2 . from _Point
 {-# INLINE rv2 #-}
 
 rasterificPtTransf :: TypeableFloat n => T2 n -> R.Point -> R.Point
-rasterificPtTransf t = over rv2 (transform t)
+rasterificPtTransf t = over rv2 (papply t)
 
 rasterificMatTransf :: TypeableFloat n => T2 n -> R.Transformation
 rasterificMatTransf tr = R.Transformation a c e b d f
