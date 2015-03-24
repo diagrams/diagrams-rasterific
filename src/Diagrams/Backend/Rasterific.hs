@@ -462,14 +462,13 @@ writeJpeg quality outFile img = L.writeFile outFile bs
   where
     bs = encodeJpegAtQuality quality (pixelMap (convertPixel . dropTransparency) img)
 
-renderRasterific :: TypeableFloat n => FilePath -> SizeSpec V2 n -> Word8 -> QDiagram Rasterific V2 n Any -> IO ()
-renderRasterific outFile spec quality d = writer outFile img
+renderRasterific :: TypeableFloat n => FilePath -> SizeSpec V2 n -> QDiagram Rasterific V2 n Any -> IO ()
+renderRasterific outFile spec d = writer outFile img
   where
     writer = case takeExtension outFile of
-              ".png" -> writePng
-              ".tif" -> writeTiff
-              ".bmp" -> writeBitmap
-              ".jpg" -> writeJpeg q
-              _      -> writePng
+               ".png" -> writePng
+               ".tif" -> writeTiff
+               ".bmp" -> writeBitmap
+               ".jpg" -> writeJpeg 80
+               _      -> writePng
     img = renderDia Rasterific (RasterificOptions spec) d
-    q = min quality 100

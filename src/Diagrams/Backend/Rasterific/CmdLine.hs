@@ -116,7 +116,7 @@ chooseRender opts d =
              "png" -> writePng (opts^.output) img
              "tif" -> writeTiff (opts^.output) img
              "bmp" -> writeBitmap (opts^.output) img
-             "jpg" -> writeJpeg 100 (opts^.output) img
+             "jpg" -> writeJpeg 80 (opts^.output) img
              _     -> writePng (opts^.output) img
        | otherwise -> putStrLn $ "Unknown file type: " ++ last ps
 
