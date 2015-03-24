@@ -5,14 +5,16 @@
 {-# LANGUAGE FlexibleInstances         #-}
 {-# LANGUAGE GADTs                     #-}
 {-# LANGUAGE MultiParamTypeClasses     #-}
+{-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE TemplateHaskell           #-}
 {-# LANGUAGE TypeFamilies              #-}
 {-# LANGUAGE TypeSynonymInstances      #-}
+{-# LANGUAGE ViewPatterns              #-}
 
 -------------------------------------------------------------------------------
 -- |
 -- Module      :  Diagrams.Backend.Rasterific
--- Copyright   :  (c) 2014 diagrams-rasterific team (see LICENSE)
+-- Copyright   :  (c) 2014-2015 diagrams-rasterific team (see LICENSE)
 -- License     :  BSD-style (see LICENSE)
 -- Maintainer  :  diagrams-discuss@googlegroups.com
 --
@@ -44,24 +46,24 @@
 -- of monoidal query annotations on the diagram.  'Options' and 'Result' are
 -- associated data and type families, respectively, which yield the
 -- type of option records and rendering results specific to any
--- particular backend.  For @b ~ Rasterific@, @v ~ V2@, and @n ~ Float@, we have
+-- particular backend.  For @b ~ Rasterific@, @v ~ V2@, and @n ~ n@, we have
 --
--- > data Options Rasterific V2 Float = RasterificOptions
--- >          { _size      :: SizeSpec2D Float -- ^ The requested size of the output
+-- > data Options Rasterific V2 n = RasterificOptions
+-- >          { _size      :: SizeSpec2D n -- ^ The requested size of the output
 -- >          }
 --
 -- @
--- data family Render Rasterific V2 Float = 'R (RenderM ())'
+-- data family Render Rasterific V2 n = 'R (RenderM ())'
 -- @
 --
 -- @
--- type family Result Rasterific V2 Float = 'Image PixelRGBA8'
+-- type family Result Rasterific V2 n = 'Image PixelRGBA8'
 -- @
 --
 -- So the type of 'renderDia' resolves to
 --
 -- @
--- renderDia :: Rasterific -> Options Rasterific V2 Float -> QDiagram Rasterific V2 Float m -> 'Image PixelRGBA8'
+-- renderDia :: Rasterific -> Options Rasterific V2 n -> QDiagram Rasterific V2 n m -> 'Image PixelRGBA8'
 -- @
 --
 -- which you could call like @renderDia Rasterific (RasterificOptions (Width 250))
@@ -138,16 +140,15 @@ data Rasterific = Rasterific
 type B = Rasterific
 
 type instance V Rasterific = V2
-type instance N Rasterific = Float
+type instance N Rasterific = Double
 
-data RasterificState =
-  RasterificState { _accumStyle :: Style V2 Float
-                    -- ^ The current accumulated style.
-                  }
+data RasterificState n = RasterificState
+  { _accumStyle :: Style V2 n -- ^ The current accumulated style.
+  }
 
 makeLenses ''RasterificState
 
-instance Default RasterificState where
+instance Typeable n => Default (RasterificState n) where
   def = RasterificState
         { _accumStyle       = mempty
         }
@@ -155,22 +156,22 @@ instance Default RasterificState where
 -- | The custom monad in which intermediate drawing options take
 --   place; 'Graphics.Rasterific.Drawing' is Rasterific's own rendering
 --   monad.
-type RenderM a = StateStackT RasterificState RenderR a
+type RenderM n = StateStackT (RasterificState n) RenderR
 
 type RenderR = R.Drawing PixelRGBA8
 
-liftR :: RenderR a -> RenderM a
+liftR :: RenderR a -> RenderM n a
 liftR = lift
 
-runRenderM :: RenderM a -> RenderR a
+runRenderM :: Typeable n => RenderM n a -> RenderR a
 runRenderM = flip evalStateStackT def
 
 -- From Diagrams.Core.Types.
-instance Backend Rasterific V2 Float where
-  data Render  Rasterific V2 Float = R (RenderM ())
-  type Result  Rasterific V2 Float = Image PixelRGBA8
-  data Options Rasterific V2 Float = RasterificOptions
-          { _sizeSpec  :: SizeSpec V2 Float -- ^ The requested size of the output
+instance TypeableFloat n => Backend Rasterific V2 n where
+  data Render  Rasterific V2 n = R (RenderM n ())
+  type Result  Rasterific V2 n = Image PixelRGBA8
+  data Options Rasterific V2 n = RasterificOptions
+          { _sizeSpec  :: SizeSpec V2 n -- ^ The requested size of the output
           }
     deriving Show
 
@@ -183,7 +184,7 @@ instance Backend Rasterific V2 Float where
 
   adjustDia c opts d = adjustDia2D sizeSpec c opts (d # reflectY)
 
-toRender :: RTree Rasterific V2 Float a -> Render Rasterific V2 Float
+toRender :: TypeableFloat n => RTree Rasterific V2 n a -> Render Rasterific V2 n
 toRender = fromRTree
   . Node (RStyle (mempty # recommendFillColor (transparent :: AlphaColour Double)))
   . (:[])
@@ -200,27 +201,27 @@ toRender = fromRTree
         restore
       fromRTree (Node _ rs) = F.foldMap fromRTree rs
 
-runR :: Render Rasterific V2 Float -> RenderM ()
+runR :: Render Rasterific V2 n -> RenderM n ()
 runR (R r) = r
 
-instance Monoid (Render Rasterific V2 Float) where
+instance Monoid (Render Rasterific V2 n) where
   mempty = R $ return ()
   (R rd1) `mappend` (R rd2) = R (rd1 >> rd2)
 
-instance Hashable (Options Rasterific V2 Float) where
+instance Hashable n => Hashable (Options Rasterific V2 n) where
   hashWithSalt s (RasterificOptions sz) = s `hashWithSalt` sz
 
-sizeSpec :: Lens' (Options Rasterific V2 Float) (SizeSpec V2 Float)
+sizeSpec :: Lens' (Options Rasterific V2 n) (SizeSpec V2 n)
 sizeSpec = lens (\(RasterificOptions {_sizeSpec = s}) -> s)
                      (\o s -> o {_sizeSpec = s})
 
-rasterificStrokeStyle :: Style v n
-                     -> (Float, R.Join, (R.Cap, R.Cap), Maybe (R.DashPattern, Float))
+rasterificStrokeStyle :: TypeableFloat n => Style v n
+                     -> (n, R.Join, (R.Cap, R.Cap), Maybe (R.DashPattern, n))
 rasterificStrokeStyle s = (strokeWidth, strokeJoin, strokeCaps, strokeDash)
   where
     strokeWidth = case getLineWidth <$> getAttr s of
                       Just o -> o
-                      _    ->  1
+                      _      -> 1
     strokeJoin = fromMaybe (R.JoinMiter 0) (fromLineJoin . getLineJoin <$> getAttr s)
     strokeCaps = (strokeCap, strokeCap)
     strokeCap  = fromMaybe (R.CapStraight 0) (fromLineCap . getLineCap <$> getAttr s)
@@ -236,16 +237,22 @@ fromLineJoin LineJoinMiter = R.JoinMiter 0
 fromLineJoin LineJoinRound = R.JoinRound
 fromLineJoin LineJoinBevel = R.JoinMiter 1
 
-fromDashing :: Dashing Float -> (R.DashPattern, Float)
-fromDashing (Dashing ds d) = (ds, d)
+fromDashing :: Real n => Dashing n -> (R.DashPattern, n)
+fromDashing (Dashing ds d) = (map realToFrac ds, d)
 
 fromFillRule :: FillRule -> R.FillMethod
 fromFillRule EvenOdd = R.FillEvenOdd
 fromFillRule _ = R.FillWinding
 
+getAttrN :: AttributeClass (a n) => Style v n -> Maybe (a n)
+getAttrN = getAttr
+
 -- | Get an accumulated style attribute from the render monad state.
-getStyleAttrib :: (AttributeClass a) => (a -> b) -> RenderM (Maybe b)
+getStyleAttrib :: AttributeClass a => (a -> b) -> RenderM n (Maybe b)
 getStyleAttrib f = (fmap f . getAttr) <$> use accumStyle
+
+getStyleAttribN :: AttributeClass (a n) => (a n -> b) -> RenderM n (Maybe b)
+getStyleAttribN f = (fmap f . getAttr) <$> use accumStyle
 
 rasterificColor :: SomeColor -> Double -> PixelRGBA8
 rasterificColor c o = PixelRGBA8 r g b a
@@ -259,13 +266,12 @@ rasterificSpreadMethod GradPad      = R.SamplerPad
 rasterificSpreadMethod GradReflect  = R.SamplerReflect
 rasterificSpreadMethod GradRepeat   = R.SamplerRepeat
 
-rasterificStops :: [GradientStop Float] -> Gradient PixelRGBA8
+rasterificStops :: TypeableFloat n => [GradientStop n] -> Gradient PixelRGBA8
 rasterificStops = map fromStop
   where
-    fromStop (GradientStop c v) = (v, rasterificColor c 1)
-      -- (double2Float v, rasterificColor c 1)
+    fromStop (GradientStop c v) = (realToFrac v, rasterificColor c 1)
 
-rasterificLinearGradient :: LGradient Float -> R.Texture PixelRGBA8
+rasterificLinearGradient :: TypeableFloat n => LGradient n -> R.Texture PixelRGBA8
 rasterificLinearGradient g = transformTexture tr tx
   where
     tr = rasterificMatTransf (inv $ g^.lGradTrans)
@@ -276,11 +282,11 @@ rasterificLinearGradient g = transformTexture tr tx
     p1 = p2v2 (g^.lGradEnd)
 
 
-rasterificRadialGradient :: RGradient Float -> R.Texture PixelRGBA8
+rasterificRadialGradient :: TypeableFloat n => RGradient n -> R.Texture PixelRGBA8
 rasterificRadialGradient g = transformTexture tr tx
   where
     tr = rasterificMatTransf (inv $ g^.rGradTrans)
-    tx = withSampler spreadMethod (radialGradientWithFocusTexture gradDef c r1 f)
+    tx = withSampler spreadMethod (radialGradientWithFocusTexture gradDef c (realToFrac r1) f)
     spreadMethod = rasterificSpreadMethod (g^.rGradSpreadMethod)
     c = p2v2 (g^.rGradCenter1)
     f = p2v2 (g^.rGradCenter0)
@@ -298,33 +304,34 @@ rasterificRadialGradient g = transformTexture tr tx
     ss = zipWith (\gs sf -> gs & stopFraction .~ sf ) gradStops stopFracs
 
 -- Convert a diagrams @Texture@ and opacity to a rasterific texture.
-rasterificTexture :: Texture Float -> Double -> R.Texture PixelRGBA8
+rasterificTexture :: TypeableFloat n => Texture n -> Double -> R.Texture PixelRGBA8
 rasterificTexture (SC c) o = uniformTexture $ rasterificColor c o
 rasterificTexture (LG g) _ = rasterificLinearGradient g
 rasterificTexture (RG g) _ = rasterificRadialGradient g
 
-p2v2 :: P2 Float -> R.Point
-p2v2 (P (V2 x y)) = R.V2 x y
+p2v2 :: Real n => P2 n -> R.Point
+p2v2 (P v) = r2v2 v
 {-# INLINE p2v2 #-}
 
-r2v2 :: V2 Float -> R.Point
-r2v2 (V2 x y) = R.V2 x y
+r2v2 :: Real n => V2 n -> R.Point
+r2v2 (V2 x y) = R.V2 (realToFrac x) (realToFrac y)
 {-# INLINE r2v2 #-}
 
-rasterificPtTransf :: T2 Float -> R.Point -> R.Point
-rasterificPtTransf tr p = p2v2 $ transform tr p'
-  where
-    p' = mkP2 x y
-    R.V2 x y = p
+rv2 :: (Real n, Fractional n) => Iso' R.Point (V2 n)
+rv2 = iso (\(R.V2 x y) -> V2 (realToFrac x) (realToFrac y)) r2v2
+{-# INLINE rv2 #-}
 
-rasterificMatTransf :: T2 Float -> R.Transformation
+rasterificPtTransf :: TypeableFloat n => T2 n -> R.Point -> R.Point
+rasterificPtTransf t = over rv2 (transform t)
+
+rasterificMatTransf :: TypeableFloat n => T2 n -> R.Transformation
 rasterificMatTransf tr = R.Transformation a c e b d f
   where
-    [[a, b], [c, d], [e, f]] = matrixHomRep tr
+    [[a, b], [c, d], [e, f]] = map realToFrac <$> matrixHomRep tr
 
 -- Note: Using view patterns confuses ghc to think there are missing patterns,
 -- so we avoid them here.
-renderSeg :: Located (Segment Closed V2 Float) -> R.Primitive
+renderSeg :: TypeableFloat n => Located (Segment Closed V2 n) -> R.Primitive
 renderSeg l =
   case viewLoc l of
     (p, Linear (OffsetClosed v)) ->
@@ -336,29 +343,28 @@ renderSeg l =
       where
         (q0, q1, q2, q3) = (p2v2 p, q0 + r2v2 u1, q0 + r2v2 u2, q0 + r2v2 u3)
 
-renderPath :: Path V2 Float -> [[R.Primitive]]
+renderPath :: TypeableFloat n => Path V2 n -> [[R.Primitive]]
 renderPath p = (map . map) renderSeg (pathLocSegments p)
 
-clip :: Style V2 Float -> RenderR () -> RenderM ()
+clip :: TypeableFloat n => Style V2 n -> RenderR () -> RenderM n ()
 clip sty d =
   maybe (liftR d)
         (\paths -> liftR $ R.withClipping
                   (R.fill (concat . concat $ map renderPath paths)) d)
-        (op Clip <$> getAttr sty)
+        (op Clip <$> getAttrN sty)
 
 -- Stroke both dashed and solid lines.
-mkStroke :: Float ->  R.Join -> (R.Cap, R.Cap) ->  Maybe (R.DashPattern, Float)
+mkStroke :: TypeableFloat n => n ->  R.Join -> (R.Cap, R.Cap) -> Maybe (R.DashPattern, n)
       -> [[R.Primitive]] -> RenderR ()
-mkStroke l j c d  primList =
+mkStroke (realToFrac -> l) j c d primList =
   maybe (mapM_ (R.stroke l j c) primList)
-        (\(dsh, off) -> mapM_ (R.dashedStrokeWithOffset off dsh l j c) primList)
+        (\(dsh, off) -> mapM_ (R.dashedStrokeWithOffset (realToFrac off) dsh l j c) primList)
         d
 
-instance Renderable (Path V2 Float) Rasterific where
+instance TypeableFloat n => Renderable (Path V2 n) Rasterific where
   render _ p = R $ do
-    f <- getStyleAttrib getFillTexture
-    s <- fromMaybe (SC (SomeColor (black :: Colour Double)))
-         <$> getStyleAttrib getLineTexture
+    f <- getStyleAttribN getFillTexture
+    s <- fromMaybe (solid black) <$> getStyleAttribN getLineTexture
     o <- fromMaybe 1 <$> getStyleAttrib getOpacity
     r <- fromMaybe Winding <$> getStyleAttrib getFillRule
     sty <- use accumStyle
@@ -413,21 +419,20 @@ textBox f p s = (_xMax bb - _xMin bb, _yMax bb - _yMin bb)
   where
     bb = stringBoundingBox f 96 p s
 
-instance Renderable (Text Float) Rasterific where
+instance TypeableFloat n => Renderable (Text n) Rasterific where
   render _ (Text tr al str) = R $ do
-    fs      <- fromMaybe 12 <$> getStyleAttrib (getFontSize :: FontSize Float -> Float)
+    fs      <- fromMaybe 12 <$> getStyleAttrib (getFontSize :: FontSize n -> n)
     slant   <- fromMaybe FontSlantNormal <$> getStyleAttrib getFontSlant
     fw      <- fromMaybe FontWeightNormal <$> getStyleAttrib getFontWeight
-    f       <- fromMaybe (SC (SomeColor (black :: Colour Double)))
-               <$> getStyleAttrib getFillTexture
+    f       <- fromMaybe (solid black) <$> getStyleAttribN getFillTexture
     o       <- fromMaybe 1 <$> getStyleAttrib getOpacity
     let fColor = rasterificTexture f o
-        fs'          = R.PointSize fs
+        fs'          = R.PointSize (realToFrac fs)
         fnt          = fromFontStyle slant fw
         (x, y)       = textBox fnt fs' str
         (refX, refY) = case al of
           BaselineText         -> (0, 0)
-          BoxAlignedText xt yt -> (x * xt, -y * yt)
+          BoxAlignedText xt yt -> (x * realToFrac xt, -y * realToFrac yt)
         p = rasterificPtTransf (moveOriginBy (r2 (refX, refY)) mempty) (R.V2 0 0)
     liftR (R.withTransformation (rasterificMatTransf (tr <> reflectionY))
           (R.withTexture fColor $ R.printTextAt fnt fs' p str))
@@ -441,7 +446,7 @@ toImageRGBA8 (ImageYA8 i)    = promoteImage i
 toImageRGBA8 (ImageCMYK8 i)  = promoteImage (convertImage i :: Image PixelRGB8)
 toImageRGBA8 _               = error "Unsupported Pixel type"
 
-instance Renderable (DImage Float Embedded) Rasterific where
+instance TypeableFloat n => Renderable (DImage n Embedded) Rasterific where
   render _ (DImage iD w h tr) = R $ liftR
                                (R.withTransformation
                                (rasterificMatTransf (tr <> reflectionY))
@@ -449,15 +454,15 @@ instance Renderable (DImage Float Embedded) Rasterific where
     where
       ImageRaster dImg = iD
       img = toImageRGBA8 dImg
-      trl = moveOriginBy (r2 (fromIntegral w / 2, fromIntegral h / 2)) mempty
+      trl = moveOriginBy (r2 (fromIntegral w / 2, fromIntegral h / 2 :: n)) mempty
       p   = rasterificPtTransf trl (R.V2 0 0)
 
-writeJpeg :: Word8 -> FilePath -> Result Rasterific V2 Float -> IO ()
+writeJpeg :: Word8 -> FilePath -> Result Rasterific V2 n -> IO ()
 writeJpeg quality outFile img = L.writeFile outFile bs
   where
     bs = encodeJpegAtQuality quality (pixelMap (convertPixel . dropTransparency) img)
 
-renderRasterific :: FilePath -> SizeSpec V2 Float -> Word8 -> Diagram Rasterific -> IO ()
+renderRasterific :: TypeableFloat n => FilePath -> SizeSpec V2 n -> Word8 -> QDiagram Rasterific V2 n Any -> IO ()
 renderRasterific outFile spec quality d = writer outFile img
   where
     writer = case takeExtension outFile of
