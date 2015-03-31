@@ -49,12 +49,8 @@
 -- particular backend.  For @b ~ Rasterific@, @v ~ V2@, and @n ~ n@, we have
 --
 -- > data Options Rasterific V2 n = RasterificOptions
--- >          { _size      :: SizeSpec2D n -- ^ The requested size of the output
--- >          }
---
--- @
--- data family Render Rasterific V2 n = 'R (RenderM ())'
--- @
+-- >        { _size      :: SizeSpec2D n -- ^ The requested size of the output
+-- >        }
 --
 -- @
 -- type family Result Rasterific V2 n = 'Image PixelRGBA8'
@@ -66,7 +62,7 @@
 -- renderDia :: Rasterific -> Options Rasterific V2 n -> QDiagram Rasterific V2 n m -> 'Image PixelRGBA8'
 -- @
 --
--- which you could call like @renderDia Rasterific (RasterificOptions (Width 250))
+-- which you could call like @renderDia Rasterific (RasterificOptions (mkWidth 250))
 -- myDiagram@.
 --
 -------------------------------------------------------------------------------
@@ -454,11 +450,17 @@ instance TypeableFloat n => Renderable (DImage n Embedded) Rasterific where
       trl = moveOriginBy (r2 (fromIntegral w / 2, fromIntegral h / 2 :: n)) mempty
       p   = rasterificPtTransf trl (R.V2 0 0)
 
+-- | Render a 'Rasterific' diagram to a jpeg file with given quality
+--   (between 0 and 100).
 writeJpeg :: Word8 -> FilePath -> Result Rasterific V2 n -> IO ()
 writeJpeg quality outFile img = L.writeFile outFile bs
   where
     bs = encodeJpegAtQuality quality (pixelMap (convertPixel . dropTransparency) img)
 
+-- | Render a 'Rasterific' diagram to a file with the given size. The
+--   format is determined by the extension (@.png@, @.tif@, @.bmp@ and
+--   @.jpg@ supported. (jpeg quality is 80, use 'writeJpeg' to choose
+--   quality).
 renderRasterific :: TypeableFloat n => FilePath -> SizeSpec V2 n -> QDiagram Rasterific V2 n Any -> IO ()
 renderRasterific outFile spec d = writer outFile img
   where
