@@ -80,6 +80,7 @@ module Diagrams.Backend.Rasterific
 
 import           Diagrams.Core.Compile
 import           Diagrams.Core.Transform             (matrixHomRep)
+import           Diagrams.Core.Types
 
 
 import           Diagrams.Prelude                    hiding (opacity, view)
@@ -107,7 +108,7 @@ import           Graphics.Text.TrueType
 
 
 import           Control.Monad                       (when)
-import           Control.Monad.StateStack
+import           Control.Monad.State
 import           Control.Monad.Trans                 (lift)
 
 
@@ -152,7 +153,7 @@ instance Typeable n => Default (RasterificState n) where
 -- | The custom monad in which intermediate drawing options take
 --   place; 'Graphics.Rasterific.Drawing' is Rasterific's own rendering
 --   monad.
-type RenderM n = StateStackT (RasterificState n) RenderR
+type RenderM n = StateT (RasterificState n) RenderR
 
 type RenderR = R.Drawing PixelRGBA8
 
@@ -160,7 +161,15 @@ liftR :: RenderR a -> RenderM n a
 liftR = lift
 
 runRenderM :: Typeable n => RenderM n a -> RenderR a
-runRenderM = flip evalStateStackT def
+runRenderM = flip evalStateT def
+
+-- | Map the underlying monad of 'StateT'. Any changes to the state in
+--   @StateT s m a@ are ingnored ignored.
+liftMap :: (Monad m, Monad n) => (m a -> n b) -> StateT s m a -> StateT s n b
+liftMap f sma = StateT $ \s -> do
+  let ma = evalStateT sma s
+  b <- f ma
+  return (b, s)
 
 -- From Diagrams.Core.Types.
 instance TypeableFloat n => Backend Rasterific V2 n where
@@ -180,22 +189,25 @@ instance TypeableFloat n => Backend Rasterific V2 n where
 
   adjustDia c opts d = adjustDia2D sizeSpec c opts (d # reflectY)
 
-toRender :: TypeableFloat n => RTree Rasterific V2 n a -> Render Rasterific V2 n
+toRender :: TypeableFloat n => RTree Rasterific V2 n Annotation -> Render Rasterific V2 n
 toRender = fromRTree
   . Node (RStyle (mempty # recommendFillColor (transparent :: AlphaColour Double)))
   . (:[])
   . splitTextureFills
     where
-      fromRTree (Node (RPrim p) _) = render Rasterific p
-      fromRTree (Node (RStyle sty) rs) = R $ do
-        save
-        accumStyle <>= sty
-        aStyle <- use accumStyle
-        let R r = F.foldMap fromRTree rs
-            m = evalStateStackT r (RasterificState aStyle)
-        clip sty m
-        restore
-      fromRTree (Node _ rs) = F.foldMap fromRTree rs
+      fromRTree (Node n rs) = case n of
+        RPrim p                 -> render Rasterific p
+        RStyle sty'             -> R $ do
+          sty <- accumStyle <<>= sty'
+          aStyle <- use accumStyle
+          let R r = F.foldMap fromRTree rs
+              m   = evalStateT r (RasterificState aStyle)
+          clip sty m
+          accumStyle .= sty
+        RAnnot (OpacityGroup x) -> R $ liftMap (R.withGroupOpacity (round $ 255 * x)) r
+        _                       -> R r
+        where
+          R r = F.foldMap toRender rs
 
 runR :: Render Rasterific V2 n -> RenderM n ()
 runR (R r) = r
