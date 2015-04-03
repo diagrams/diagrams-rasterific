@@ -221,12 +221,11 @@ fromDashing (Dashing ds d) = (map realToFrac ds, d)
 
 fromFillRule :: FillRule -> R.FillMethod
 fromFillRule EvenOdd = R.FillEvenOdd
-fromFillRule _        = R.FillWinding
+fromFillRule _       = R.FillWinding
 
 -- | Get an accumulated style attribute from the render monad state.
 getStyleAttrib :: AttributeClass a => (a -> b) -> RenderM n (Maybe b)
 getStyleAttrib f = (fmap f . getAttr) <$> ask
--- getStyleAttrib f = (fmap f . getAttr) <$> use accumStyle
 
 getStyleAttribN :: AttributeClass (a n) => (a n -> b) -> RenderM n (Maybe b)
 getStyleAttribN = getStyleAttrib
@@ -239,9 +238,9 @@ rasterificColor c o = PixelRGBA8 r g b a
     int x = round (255 * x)
 
 rasterificSpreadMethod :: SpreadMethod -> R.SamplerRepeat
-rasterificSpreadMethod GradPad      = R.SamplerPad
-rasterificSpreadMethod GradReflect  = R.SamplerReflect
-rasterificSpreadMethod GradRepeat   = R.SamplerRepeat
+rasterificSpreadMethod GradPad     = R.SamplerPad
+rasterificSpreadMethod GradReflect = R.SamplerReflect
+rasterificSpreadMethod GradRepeat  = R.SamplerRepeat
 
 rasterificStops :: TypeableFloat n => [GradientStop n] -> Gradient PixelRGBA8
 rasterificStops = map fromStop
