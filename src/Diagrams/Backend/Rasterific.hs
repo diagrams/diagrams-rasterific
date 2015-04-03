@@ -164,7 +164,7 @@ runRenderM :: Typeable n => RenderM n a -> RenderR a
 runRenderM = flip evalStateT def
 
 -- | Map the underlying monad of 'StateT'. Any changes to the state in
---   @StateT s m a@ are ingnored ignored.
+--   @StateT s m a@ are ignored.
 liftMap :: (Monad m, Monad n) => (m a -> n b) -> StateT s m a -> StateT s n b
 liftMap f sma = StateT $ \s -> do
   let ma = evalStateT sma s
