@@ -198,7 +198,7 @@ toRender = fromRTree
       fromRTree (Node n rs) = case n of
         RPrim p                 -> render Rasterific p
         RStyle sty'             -> R $ do
-          sty <- accumStyle <<>= sty'
+          sty <- accumStyle <<<>= sty'
           aStyle <- use accumStyle
           let R r = F.foldMap fromRTree rs
               m   = evalStateT r (RasterificState aStyle)
