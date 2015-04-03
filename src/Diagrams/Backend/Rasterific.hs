@@ -83,10 +83,10 @@ import           Diagrams.Core.Transform             (matrixHomRep)
 import           Diagrams.Core.Types
 
 
-import           Diagrams.Prelude                    hiding (opacity, view)
+import           Diagrams.Prelude                    hiding (opacity, local)
 import           Diagrams.TwoD.Adjust                (adjustDia2D)
 import           Diagrams.TwoD.Attributes            (splitTextureFills)
-import           Diagrams.TwoD.Path                  (Clip (Clip), getFillRule)
+import           Diagrams.TwoD.Path                  (getFillRule)
 import           Diagrams.TwoD.Text                  hiding (Font)
 
 import           Codec.Picture
@@ -107,10 +107,7 @@ import qualified Graphics.Rasterific.Transformations as R
 import           Graphics.Text.TrueType
 
 
-import           Control.Monad                       (when)
-import           Control.Monad.State
-import           Control.Monad.Trans                 (lift)
-
+import           Control.Monad.Reader
 
 import qualified Data.ByteString.Lazy                as L (writeFile)
 import qualified Data.Foldable                       as F
@@ -139,37 +136,18 @@ type B = Rasterific
 type instance V Rasterific = V2
 type instance N Rasterific = Double
 
-data RasterificState n = RasterificState
-  { _accumStyle :: Style V2 n -- ^ The current accumulated style.
-  }
-
-makeLenses ''RasterificState
-
-instance Typeable n => Default (RasterificState n) where
-  def = RasterificState
-        { _accumStyle       = mempty
-        }
-
 -- | The custom monad in which intermediate drawing options take
 --   place; 'Graphics.Rasterific.Drawing' is Rasterific's own rendering
 --   monad.
-type RenderM n = StateT (RasterificState n) RenderR
+type RenderM n = ReaderT (Style V2 n) RenderR
 
 type RenderR = R.Drawing PixelRGBA8
 
 liftR :: RenderR a -> RenderM n a
 liftR = lift
 
-runRenderM :: Typeable n => RenderM n a -> RenderR a
-runRenderM = flip evalStateT def
-
--- | Map the underlying monad of 'StateT'. Any changes to the state in
---   @StateT s m a@ are ignored.
-liftMap :: (Monad m, Monad n) => (m a -> n b) -> StateT s m a -> StateT s n b
-liftMap f sma = StateT $ \s -> do
-  let ma = evalStateT sma s
-  b <- f ma
-  return (b, s)
+runRenderM :: TypeableFloat n => RenderM n a -> RenderR a
+runRenderM = flip runReaderT (mempty # recommendFillColor transparent)
 
 -- From Diagrams.Core.Types.
 instance TypeableFloat n => Backend Rasterific V2 n where
@@ -190,26 +168,20 @@ instance TypeableFloat n => Backend Rasterific V2 n where
   adjustDia c opts d = adjustDia2D sizeSpec c opts (d # reflectY)
 
 toRender :: TypeableFloat n => RTree Rasterific V2 n Annotation -> Render Rasterific V2 n
-toRender = fromRTree
-  . Node (RStyle (mempty # recommendFillColor (transparent :: AlphaColour Double)))
-  . (:[])
-  . splitTextureFills
-    where
-      fromRTree (Node n rs) = case n of
-        RPrim p                 -> render Rasterific p
-        RStyle sty'             -> R $ do
-          -- mappend new state and retrieve old state
-          sty <- accumStyle <<<>= sty'
-          aStyle <- use accumStyle
-          let R r = F.foldMap fromRTree rs
-              m   = evalStateT r (RasterificState aStyle)
-          clip sty m
-          -- restore the old state
-          accumStyle .= sty
-        RAnnot (OpacityGroup x) -> R $ liftMap (R.withGroupOpacity (round $ 255 * x)) r
-        _                       -> R r
-        where
-          R r = F.foldMap toRender rs
+toRender = fromRTree . splitTextureFills
+  where
+    fromRTree (Node n rs) = case n of
+      RPrim p                 -> render Rasterific p
+      RStyle sty              -> R $ clip sty (local (<> sty) r)
+      RAnnot (OpacityGroup x) -> R $ mapReaderT (R.withGroupOpacity (round $ 255 * x)) r
+      _                       -> R r
+      where R r = F.foldMap fromRTree rs
+
+-- | Clip a render using the Clip from the style.
+clip :: TypeableFloat n => Style V2 n -> RenderM n () -> RenderM n ()
+clip (view _clip -> clips) r
+  | null clips = r
+  | otherwise  = mapReaderT (R.withClipping (R.fill $ map renderPath clips)) r
 
 runR :: Render Rasterific V2 n -> RenderM n ()
 runR (R r) = r
@@ -251,12 +223,10 @@ fromFillRule :: FillRule -> R.FillMethod
 fromFillRule EvenOdd = R.FillEvenOdd
 fromFillRule _        = R.FillWinding
 
-getAttrN :: AttributeClass (a n) => Style v n -> Maybe (a n)
-getAttrN = getAttr
-
 -- | Get an accumulated style attribute from the render monad state.
 getStyleAttrib :: AttributeClass a => (a -> b) -> RenderM n (Maybe b)
-getStyleAttrib f = (fmap f . getAttr) <$> use accumStyle
+getStyleAttrib f = (fmap f . getAttr) <$> ask
+-- getStyleAttrib f = (fmap f . getAttr) <$> use accumStyle
 
 getStyleAttribN :: AttributeClass (a n) => (a n -> b) -> RenderM n (Maybe b)
 getStyleAttribN = getStyleAttrib
@@ -287,7 +257,6 @@ rasterificLinearGradient g = transformTexture tr tx
     gradDef = rasterificStops (g^.lGradStops)
     p0 = p2v2 (g^.lGradStart)
     p1 = p2v2 (g^.lGradEnd)
-
 
 rasterificRadialGradient :: TypeableFloat n => RGradient n -> R.Texture PixelRGBA8
 rasterificRadialGradient g = transformTexture tr tx
@@ -353,13 +322,6 @@ renderSeg l =
 renderPath :: TypeableFloat n => Path V2 n -> [[R.Primitive]]
 renderPath p = (map . map) renderSeg (pathLocSegments p)
 
-clip :: TypeableFloat n => Style V2 n -> RenderR () -> RenderM n ()
-clip sty d =
-  maybe (liftR d)
-        (\paths -> liftR $ R.withClipping
-                  (R.fill (concat . concat $ map renderPath paths)) d)
-        (op Clip <$> getAttrN sty)
-
 -- Stroke both dashed and solid lines.
 mkStroke :: TypeableFloat n => n ->  R.Join -> (R.Cap, R.Cap) -> Maybe (R.DashPattern, n)
       -> [[R.Primitive]] -> RenderR ()
@@ -374,7 +336,7 @@ instance TypeableFloat n => Renderable (Path V2 n) Rasterific where
     s <- fromMaybe (solid black) <$> getStyleAttribN getLineTexture
     o <- fromMaybe 1 <$> getStyleAttrib getOpacity
     r <- fromMaybe Winding <$> getStyleAttrib getFillRule
-    sty <- use accumStyle
+    sty <- ask
 
     let (l, j, c, d) = rasterificStrokeStyle sty
         rule = fromFillRule r
