@@ -174,9 +174,10 @@ fromRTree (Node n rs) = case n of
 
 -- | Clip a render using the Clip from the style.
 clip :: TypeableFloat n => Style V2 n -> RenderM n () -> RenderM n ()
-clip (view _clip -> clips) r
-  | null clips = r
-  | otherwise  = mapReaderT (R.withClipping (R.fill $ map renderPath clips)) r
+clip sty r = go (sty ^. _clip)
+  where
+    go []     = r
+    go (p:ps) = mapReaderT (R.withClipping $ R.fill (renderPath p)) (go ps)
 
 runR :: Render Rasterific V2 n -> RenderM n ()
 runR (R r) = r
