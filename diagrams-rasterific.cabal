@@ -13,6 +13,7 @@ category:            Graphics
 build-type:          Simple
 data-files:          fonts/*.ttf
 extra-source-files:  README.md, CHANGES.md
+tested-with:         GHC == 7.4.2, GHC == 7.6.3, GHC == 7.8.4, GHC == 7.10.1
 cabal-version:       >=1.10
 Source-repository head
   type:     git
@@ -30,7 +31,7 @@ library
                        Rasterific >= 0.5 && < 0.6,
                        FontyFruity >= 0.5 && < 0.6,
                        JuicyPixels >= 3.1.5 && < 3.3,
-                       lens >= 4.0 && < 4.9,
+                       lens >= 4.0 && < 4.10,
                        mtl >= 2.1 && < 2.3,
                        statestack >= 0.2 && < 0.3,
                        data-default-class >= 0.0 && < 0.1,
