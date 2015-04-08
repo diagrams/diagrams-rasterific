@@ -13,6 +13,7 @@ category:            Graphics
 build-type:          Simple
 data-files:          fonts/*.ttf
 extra-source-files:  README.md, CHANGES.md
+tested-with:         GHC == 7.4.2, GHC == 7.6.3, GHC == 7.8.4, GHC == 7.10.1
 cabal-version:       >=1.10
 Source-repository head
   type:     git
