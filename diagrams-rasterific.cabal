@@ -12,7 +12,7 @@ bug-reports:         http://github.com/diagrams/diagrams-rasterific/issues
 category:            Graphics
 build-type:          Simple
 data-files:          fonts/*.ttf
-extra-source-files:  README.md, CHANGES.md
+extra-source-files:  README.md, CHANGELOG.md
 tested-with:         GHC == 7.4.2, GHC == 7.6.3, GHC == 7.8.4, GHC == 7.10.1
 cabal-version:       >=1.10
 Source-repository head
