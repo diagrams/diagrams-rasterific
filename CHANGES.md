@@ -1,5 +1,5 @@
-1.3
----
+1.3 (8 April 2015)
+------------------
 
 - Change form Float to Double.
 
