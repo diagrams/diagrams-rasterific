@@ -1,6 +1,6 @@
 # Change Log
 
-## [v1.3](8) (2015-04-08)
+## [v1.3](http://github.com/diagrams/diagrams-rasterific/tree/v1.3) (2015-04-19)
 
 - bump version to 1.3
 
