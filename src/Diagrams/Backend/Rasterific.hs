@@ -75,6 +75,7 @@ module Diagrams.Backend.Rasterific
   , size
 
   , writeJpeg
+  , fromFontStyle
 
   ) where
 
