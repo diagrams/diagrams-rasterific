@@ -37,20 +37,14 @@ mkBoundingBox f p s = fromCorners
     (w, h) = (_xMax bb - _xMin bb, _yMax bb - _yMin bb)
     bb = stringBoundingBox f 96 p s
 
--- XXX This function is copied from Diagrams.TwoD.Text for convenience
--- and should be deleted here and exprot from -lib before merging.
-recommendFontSize :: (N a ~ n, Typeable n, HasStyle a) => Measure n -> a -> a
-recommendFontSize = applyMAttr . fmap (FontSize . Recommend . Last)
-
 -- | Create a primitive text diagram from the given 'FontSlant', 'FontWeight',
 --   and string, with center alignment, envelope and trace based on
 --   the 'BoundingBox' of the text.
 texterific' :: Renderable (Text Double) b
             => FontSlant -> FontWeight -> String -> QDiagram b V2 Double Any
-texterific' fs fw s = center . recommendFillColor black
-                    . recommendFontSize (local 1)
+texterific' fs fw s = recommendFillColor black . fontSizeL 1
                     . fontSlant fs . fontWeight fw
-                    $ mkQD (Prim $ Text mempty (BoxAlignedText 0 0) s)
+                    $ mkQD (Prim $ Text mempty BaselineText s)
                            (getEnvelope bb)
                            (getTrace bb)
                            mempty
