@@ -21,7 +21,6 @@ module Diagrams.Backend.Rasterific.Text
 import           Data.Monoid.Recommend
 import           Data.Typeable
 
-import           Graphics.Rasterific          (PointSize(..))
 import           Graphics.Text.TrueType       hiding (BoundingBox)
 
 import           Diagrams.TwoD.Text           hiding (Font)
