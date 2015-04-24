@@ -11,15 +11,13 @@
 -- Experimental module to create text with an envelope and trace. The texterifc
 -- functions build diagrams with text size of Local 1 and a s specified slant
 -- and weight. The size should be changed only with the scale functions and
--- changing the slant and/or weight can result in an slightly incorrect envelope.
+-- changing the slant and/or weight after the text has benn created
+-- can result in an slightly incorrect envelope.
 -------------------------------------------------------------------------------
 module Diagrams.Backend.Rasterific.Text
   ( texterific'
   , texterific
   ) where
-
-import           Data.Monoid.Recommend
-import           Data.Typeable
 
 import           Graphics.Text.TrueType       hiding (BoundingBox)
 
