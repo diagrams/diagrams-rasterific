@@ -83,9 +83,8 @@ import           Diagrams.Prelude            hiding (height, interval, option,
 
 import           Codec.Picture
 import           Codec.Picture.ColorQuant    (defaultPaletteOptions)
-import           Codec.Picture.Types         (dropTransparency)
 
-import qualified Data.ByteString.Lazy        as L (ByteString, writeFile)
+import qualified Data.ByteString.Lazy        as L (writeFile)
 
 import           Options.Applicative
 
@@ -166,11 +165,11 @@ animMain :: Animation Rasterific V2 Double -> IO ()
 animMain = mainWith
 
 instance TypeableFloat n => Mainable (Animation Rasterific V2 n) where
-    type MainOpts (Animation Rasterific V2 n) =
-      ((DiagramOpts, DiagramAnimOpts), DiagramLoopOpts)
+  type MainOpts (Animation Rasterific V2 n) =
+    ((DiagramOpts, DiagramAnimOpts), DiagramLoopOpts)
 
-    mainRender (opts, l) d = defaultAnimMainRender chooseRender output opts d >> defaultLoopRender l
-
+  mainRender (opts, l) d = defaultAnimMainRender chooseRender output opts d
+                        >> defaultLoopRender l
 
 gifMain :: [(Diagram Rasterific, GifDelay)] -> IO ()
 gifMain = mainWith
@@ -199,45 +198,19 @@ instance Parseable GifOpts where
                       <> help "Number of times to repeat" )
 
 instance TypeableFloat n => Mainable [(QDiagram Rasterific V2 n Any, GifDelay)] where
-    type MainOpts [(QDiagram Rasterific V2 n Any, GifDelay)] = (DiagramOpts, GifOpts)
+  type MainOpts [(QDiagram Rasterific V2 n Any, GifDelay)] = (DiagramOpts, GifOpts)
 
-    mainRender = gifRender
+  mainRender (dOpts, gOpts) ids
+    | null path = putStrLn "No output file given."
+    | otherwise = case rasterGif sz lOpts pOpts ids of
+        Right bs -> L.writeFile path bs
+        Left e   -> putStrLn e
+    where
+      sz   = fromIntegral <$> mkSizeSpec2D (dOpts^.width) (dOpts^.height)
+      path = dOpts^.output
+      lOpts
+        | gOpts^.noLooping = LoopingNever
+        | otherwise        = maybe LoopingForever (LoopingRepeat . fromIntegral)
+                               (gOpts^.loopRepeat)
+      pOpts = defaultPaletteOptions {enableImageDithering=gOpts^.dither}
 
-encodeGifAnimation' :: [GifDelay] -> GifLooping -> Bool
-                   -> [Image PixelRGB8] -> Either String L.ByteString
-encodeGifAnimation' delays looping dithering lst =
-    encodeGifImages looping triples
-      where
-        triples = zipWith (\(x,z) y -> (x, y, z)) doubles delays
-        doubles = [(pal, img)
-                | (img, pal) <- palettize
-                   defaultPaletteOptions {enableImageDithering=dithering} <$> lst]
-
-writeGifAnimation' :: FilePath -> [GifDelay] -> GifLooping -> Bool
-                  -> [Image PixelRGB8] -> Either String (IO ())
-writeGifAnimation' path delays looping dithering img =
-    L.writeFile path <$> encodeGifAnimation' delays looping dithering img
-
-gifRender :: TypeableFloat n => (DiagramOpts, GifOpts) -> [(QDiagram Rasterific V2 n Any, GifDelay)] -> IO ()
-gifRender (dOpts, gOpts) lst =
-  case splitOn "." (dOpts^.output) of
-    [""] -> putStrLn "No output file given"
-    ps | last ps == "gif" -> do
-           let looping = if gOpts^.noLooping
-                         then LoopingNever
-                         else case gOpts^.loopRepeat of
-                                Nothing -> LoopingForever
-                                Just n  -> LoopingRepeat (fromIntegral n)
-               dias = map fst lst
-               delays = map snd lst
-               spec = fromIntegral <$> mkSizeSpec2D (dOpts^.width) (dOpts^.height)
-               opts = RasterificOptions spec
-               imageRGB8s = map (pixelMap dropTransparency
-                               . renderDia Rasterific opts) dias
-               result = writeGifAnimation' (dOpts^.output) delays
-                                            looping (gOpts^.dither)
-                                            imageRGB8s
-           case result of
-             Left s   -> putStrLn s
-             Right io -> io
-       | otherwise -> putStrLn "File name must end with .gif"
