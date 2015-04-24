@@ -80,12 +80,11 @@ module Diagrams.Backend.Rasterific
 
 import           Diagrams.Core.Compile
 import           Diagrams.Core.Transform             (matrixHomRep)
+import           Diagrams.Core.Types
 
 
-import           Diagrams.Prelude                    hiding (opacity, view)
+import           Diagrams.Prelude                    hiding (opacity, local)
 import           Diagrams.TwoD.Adjust                (adjustDia2D)
-import           Diagrams.TwoD.Attributes            (splitTextureFills)
-import           Diagrams.TwoD.Path                  (Clip (Clip), getFillRule)
 import           Diagrams.TwoD.Text                  hiding (Font)
 
 import           Codec.Picture
@@ -106,16 +105,12 @@ import qualified Graphics.Rasterific.Transformations as R
 import           Graphics.Text.TrueType
 
 
-import           Control.Monad                       (when)
-import           Control.Monad.StateStack
-import           Control.Monad.Trans                 (lift)
-
+import           Control.Monad.Reader
 
 import qualified Data.ByteString.Lazy                as L (writeFile)
 import qualified Data.Foldable                       as F
 import           Data.Hashable                       (Hashable (..))
-import           Data.Maybe                          (fromJust, fromMaybe,
-                                                      isJust)
+import           Data.Maybe                          (fromMaybe)
 import           Data.Tree
 import           Data.Typeable
 import           Data.Word                           (Word8)
@@ -138,29 +133,18 @@ type B = Rasterific
 type instance V Rasterific = V2
 type instance N Rasterific = Double
 
-data RasterificState n = RasterificState
-  { _accumStyle :: Style V2 n -- ^ The current accumulated style.
-  }
-
-makeLenses ''RasterificState
-
-instance Typeable n => Default (RasterificState n) where
-  def = RasterificState
-        { _accumStyle       = mempty
-        }
-
 -- | The custom monad in which intermediate drawing options take
 --   place; 'Graphics.Rasterific.Drawing' is Rasterific's own rendering
 --   monad.
-type RenderM n = StateStackT (RasterificState n) RenderR
+type RenderM n = ReaderT (Style V2 n) RenderR
 
 type RenderR = R.Drawing PixelRGBA8
 
 liftR :: RenderR a -> RenderM n a
 liftR = lift
 
-runRenderM :: Typeable n => RenderM n a -> RenderR a
-runRenderM = flip evalStateStackT def
+runRenderM :: TypeableFloat n => RenderM n a -> RenderR a
+runRenderM = flip runReaderT (mempty # recommendFillColor transparent)
 
 -- From Diagrams.Core.Types.
 instance TypeableFloat n => Backend Rasterific V2 n where
@@ -174,28 +158,26 @@ instance TypeableFloat n => Backend Rasterific V2 n where
   renderRTree _ opts t =
     R.renderDrawing (round w) (round h) bgColor r
     where
-      r       = runRenderM . runR . toRender $ t
+      r       = runRenderM . runR . fromRTree $ t
       V2 w h  = specToSize 100 (opts^.sizeSpec)
       bgColor = PixelRGBA8 0 0 0 0
 
   adjustDia c opts d = adjustDia2D sizeSpec c opts (d # reflectY)
 
-toRender :: TypeableFloat n => RTree Rasterific V2 n a -> Render Rasterific V2 n
-toRender = fromRTree
-  . Node (RStyle (mempty # recommendFillColor (transparent :: AlphaColour Double)))
-  . (:[])
-  . splitTextureFills
-    where
-      fromRTree (Node (RPrim p) _) = render Rasterific p
-      fromRTree (Node (RStyle sty) rs) = R $ do
-        save
-        accumStyle <>= sty
-        aStyle <- use accumStyle
-        let R r = F.foldMap fromRTree rs
-            m = evalStateStackT r (RasterificState aStyle)
-        clip sty m
-        restore
-      fromRTree (Node _ rs) = F.foldMap fromRTree rs
+fromRTree :: TypeableFloat n => RTree Rasterific V2 n Annotation -> Render Rasterific V2 n
+fromRTree (Node n rs) = case n of
+  RPrim p                 -> render Rasterific p
+  RStyle sty              -> R $ clip sty (local (<> sty) r)
+  RAnnot (OpacityGroup x) -> R $ mapReaderT (R.withGroupOpacity (round $ 255 * x)) r
+  _                       -> R r
+  where R r = F.foldMap fromRTree rs
+
+-- | Clip a render using the Clip from the style.
+clip :: TypeableFloat n => Style V2 n -> RenderM n () -> RenderM n ()
+clip sty r = go (sty ^. _clip)
+  where
+    go []     = r
+    go (p:ps) = mapReaderT (R.withClipping $ R.fill (renderPath p)) (go ps)
 
 runR :: Render Rasterific V2 n -> RenderM n ()
 runR (R r) = r
@@ -212,13 +194,12 @@ sizeSpec = lens _sizeSpec (\o s -> o {_sizeSpec = s})
 
 rasterificStrokeStyle :: TypeableFloat n => Style v n
                      -> (n, R.Join, (R.Cap, R.Cap), Maybe (R.DashPattern, n))
-rasterificStrokeStyle s = (strokeWidth, strokeJoin, strokeCaps, strokeDash)
+rasterificStrokeStyle s = (strokeWidth, strokeJoin, (strokeCap, strokeCap), strokeDash)
   where
-    strokeWidth = fromMaybe 1 $ getLineWidth <$> getAttr s
-    strokeJoin = fromMaybe (R.JoinMiter 0) (fromLineJoin . getLineJoin <$> getAttr s)
-    strokeCaps = (strokeCap, strokeCap)
-    strokeCap  = fromMaybe (R.CapStraight 0) (fromLineCap . getLineCap <$> getAttr s)
-    strokeDash = fromDashing . getDashing <$> getAttr s
+    strokeWidth = views _lineWidthU (fromMaybe 1) s
+    strokeJoin  = views _lineJoin   fromLineJoin s
+    strokeCap   = views _lineCap    fromLineCap s
+    strokeDash  = views _dashingU   (fmap fromDashing) s
 
 fromLineCap :: LineCap -> R.Cap
 fromLineCap LineCapButt   = R.CapStraight 0
@@ -235,17 +216,7 @@ fromDashing (Dashing ds d) = (map realToFrac ds, d)
 
 fromFillRule :: FillRule -> R.FillMethod
 fromFillRule EvenOdd = R.FillEvenOdd
-fromFillRule _        = R.FillWinding
-
-getAttrN :: AttributeClass (a n) => Style v n -> Maybe (a n)
-getAttrN = getAttr
-
--- | Get an accumulated style attribute from the render monad state.
-getStyleAttrib :: AttributeClass a => (a -> b) -> RenderM n (Maybe b)
-getStyleAttrib f = (fmap f . getAttr) <$> use accumStyle
-
-getStyleAttribN :: AttributeClass (a n) => (a n -> b) -> RenderM n (Maybe b)
-getStyleAttribN = getStyleAttrib
+fromFillRule _       = R.FillWinding
 
 rasterificColor :: SomeColor -> Double -> PixelRGBA8
 rasterificColor c o = PixelRGBA8 r g b a
@@ -255,9 +226,9 @@ rasterificColor c o = PixelRGBA8 r g b a
     int x = round (255 * x)
 
 rasterificSpreadMethod :: SpreadMethod -> R.SamplerRepeat
-rasterificSpreadMethod GradPad      = R.SamplerPad
-rasterificSpreadMethod GradReflect  = R.SamplerReflect
-rasterificSpreadMethod GradRepeat   = R.SamplerRepeat
+rasterificSpreadMethod GradPad     = R.SamplerPad
+rasterificSpreadMethod GradReflect = R.SamplerReflect
+rasterificSpreadMethod GradRepeat  = R.SamplerRepeat
 
 rasterificStops :: TypeableFloat n => [GradientStop n] -> Gradient PixelRGBA8
 rasterificStops = map fromStop
@@ -273,7 +244,6 @@ rasterificLinearGradient g = transformTexture tr tx
     gradDef = rasterificStops (g^.lGradStops)
     p0 = p2v2 (g^.lGradStart)
     p1 = p2v2 (g^.lGradEnd)
-
 
 rasterificRadialGradient :: TypeableFloat n => RGradient n -> R.Texture PixelRGBA8
 rasterificRadialGradient g = transformTexture tr tx
@@ -339,13 +309,6 @@ renderSeg l =
 renderPath :: TypeableFloat n => Path V2 n -> [[R.Primitive]]
 renderPath p = (map . map) renderSeg (pathLocSegments p)
 
-clip :: TypeableFloat n => Style V2 n -> RenderR () -> RenderM n ()
-clip sty d =
-  maybe (liftR d)
-        (\paths -> liftR $ R.withClipping
-                  (R.fill (concat . concat $ map renderPath paths)) d)
-        (op Clip <$> getAttrN sty)
-
 -- Stroke both dashed and solid lines.
 mkStroke :: TypeableFloat n => n ->  R.Join -> (R.Cap, R.Cap) -> Maybe (R.DashPattern, n)
       -> [[R.Primitive]] -> RenderR ()
@@ -356,14 +319,15 @@ mkStroke (realToFrac -> l) j c d primList =
 
 instance TypeableFloat n => Renderable (Path V2 n) Rasterific where
   render _ p = R $ do
-    f <- getStyleAttribN getFillTexture
-    s <- fromMaybe (solid black) <$> getStyleAttribN getLineTexture
-    o <- fromMaybe 1 <$> getStyleAttrib getOpacity
-    r <- fromMaybe Winding <$> getStyleAttrib getFillRule
-    sty <- use accumStyle
+    sty <- ask
+    let f = sty ^. _fillTexture
+        s = sty ^. _lineTexture
+        o = sty ^. _opacity
+        r = sty ^. _fillRule
 
-    let (l, j, c, d) = rasterificStrokeStyle sty
-        rule = fromFillRule r
+        (l, j, c, d) = rasterificStrokeStyle sty
+        canFill      = anyOf (_head . located) isLoop p && (f ^? _AC) /= Just transparent
+        rule         = fromFillRule r
 
         -- For stroking we need to keep all of the contours separate.
         primList = renderPath p
@@ -371,8 +335,9 @@ instance TypeableFloat n => Renderable (Path V2 n) Rasterific where
         -- For filling we need to concatenate them into a flat list.
         prms = concat primList
 
-    when (isJust f) $ liftR (R.withTexture (rasterificTexture (fromJust f) o)
-                    $ R.fillWithMethod rule prms)
+    when canFill $
+      liftR (R.withTexture (rasterificTexture f o) $ R.fillWithMethod rule prms)
+
     liftR (R.withTexture (rasterificTexture s o) $ mkStroke l j c d primList)
 
 -- read only of static data (safe)
@@ -414,11 +379,11 @@ textBox f p s = (_xMax bb - _xMin bb, _yMax bb - _yMin bb)
 
 instance TypeableFloat n => Renderable (Text n) Rasterific where
   render _ (Text tr al str) = R $ do
-    fs      <- fromMaybe 12 <$> getStyleAttribN getFontSize
-    slant   <- fromMaybe FontSlantNormal <$> getStyleAttrib getFontSlant
-    fw      <- fromMaybe FontWeightNormal <$> getStyleAttrib getFontWeight
-    f       <- fromMaybe (solid black) <$> getStyleAttribN getFillTexture
-    o       <- fromMaybe 1 <$> getStyleAttrib getOpacity
+    fs    <- views _fontSizeU (fromMaybe 12)
+    slant <- view _fontSlant
+    fw    <- view _fontWeight
+    f     <- view _fillTexture
+    o     <- view _opacity
     let fColor = rasterificTexture f o
         fs'          = R.PointSize (realToFrac fs)
         fnt          = fromFontStyle slant fw
