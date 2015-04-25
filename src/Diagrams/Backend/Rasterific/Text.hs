@@ -19,7 +19,7 @@ module Diagrams.Backend.Rasterific.Text
   ( texterific'
   , texterific
   , fromFontStyle
-  , mkBoundingBox
+  , textBoundingBox
   ) where
 
 import           Graphics.Text.TrueType    hiding (BoundingBox)
@@ -30,14 +30,14 @@ import           Diagrams.TwoD.Text        hiding (Font)
 import           Paths_diagrams_rasterific (getDataFileName)
 import           System.IO.Unsafe          (unsafePerformIO)
 
-
-
-mkBoundingBox :: RealFloat n => Font -> PointSize -> String -> BoundingBox V2 n
-mkBoundingBox f p s = fromCorners
-                      (P $ V2 0 (realToFrac $ -_baselineHeight bb))
-                      (P $ V2 (realToFrac w) (realToFrac h))
+-- | Get the 'BoundingBox' for some font with the origin at the start of
+--   the baseline.
+textBoundingBox :: RealFloat n => Font -> PointSize -> String -> BoundingBox V2 n
+textBoundingBox f p s = fromCorners
+                      (mkP2 (2*r2f _xMin bb)              (r2f _yMin bb))
+                      (mkP2 (r2f _xMax bb + r2f _xMin bb) (r2f _yMax bb))
   where
-    (w, h) = (_xMax bb - _xMin bb, _yMax bb - _yMin bb)
+    r2f = fmap realToFrac
     bb = stringBoundingBox f 96 p s
 
 -- | Create a primitive text diagram from the given 'FontSlant', 'FontWeight',
@@ -53,7 +53,7 @@ texterific' fs fw s = recommendFillColor black . fontSizeL 1
                            mempty
                            (boundingBoxQuery bb)
   where
-    bb = mkBoundingBox fnt (PointSize 1) s
+    bb = textBoundingBox fnt (PointSize 1) s
     fnt = fromFontStyle fs fw
 
 -- | Create a primitive text diagram from the given string, with center

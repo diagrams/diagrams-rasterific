@@ -352,7 +352,7 @@ instance TypeableFloat n => Renderable (Text n) Rasterific where
     let fColor = rasterificTexture f o
         fs'    = R.PointSize (realToFrac fs)
         fnt    = fromFontStyle slant fw
-        bb     = mkBoundingBox fnt fs' str
+        bb     = textBoundingBox fnt fs' str
         p      = case al of
           BaselineText         -> R.V2 0 0
           BoxAlignedText xt yt -> case getCorners bb of
