@@ -342,11 +342,6 @@ instance TypeableFloat n => Renderable (Path V2 n) Rasterific where
 
     liftR (R.withTexture (rasterificTexture s o) $ mkStroke l j c d primList)
 
-textBox :: Font -> R.PointSize -> String -> (Float, Float)
-textBox f p s = (_xMax bb - _xMin bb, _yMax bb - _yMin bb)
-  where
-    bb = stringBoundingBox f 96 p s
-
 instance TypeableFloat n => Renderable (Text n) Rasterific where
   render _ (Text tr al str) = R $ do
     fs    <- views _fontSizeU (fromMaybe 12)
@@ -355,15 +350,18 @@ instance TypeableFloat n => Renderable (Text n) Rasterific where
     f     <- view _fillTexture
     o     <- view _opacity
     let fColor = rasterificTexture f o
-        fs'          = R.PointSize (realToFrac fs)
-        fnt          = fromFontStyle slant fw
-        (x, y)       = textBox fnt fs' str
-        (refX, refY) = case al of
-          BaselineText         -> (0, 0)
-          BoxAlignedText xt yt -> (x * realToFrac xt, -y * realToFrac yt)
-        p = rasterificPtTransf (moveOriginBy (r2 (refX, refY)) mempty) (R.V2 0 0)
+        fs'    = R.PointSize (realToFrac fs)
+        fnt    = fromFontStyle slant fw
+        bb     = mkBoundingBox fnt fs' str
+        p      = case al of
+          BaselineText         -> R.V2 0 0
+          BoxAlignedText xt yt -> case getCorners bb of
+            Just (P (V2 xl yl), P (V2 xu yu)) -> R.V2 (-lerp' xt xu xl) (lerp' yt yu yl)
+            Nothing                           -> R.V2 0 0
     liftR (R.withTransformation (rasterificMatTransf (tr <> reflectionY))
           (R.withTexture fColor $ R.printTextAt fnt fs' p str))
+    where
+      lerp' t u v = realToFrac $ t * u + (1 - t) * v
 
 toImageRGBA8 :: DynamicImage -> Image PixelRGBA8
 toImageRGBA8 (ImageRGBA8 i)  = i
