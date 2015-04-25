@@ -1,5 +1,6 @@
-{-# LANGUAGE FlexibleContexts          #-}
-{-# LANGUAGE TypeFamilies              #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies          #-}
 
 -------------------------------------------------------------------------------
 -- |
@@ -17,13 +18,16 @@
 module Diagrams.Backend.Rasterific.Text
   ( texterific'
   , texterific
+  , fromFontStyle
   ) where
 
-import           Graphics.Text.TrueType       hiding (BoundingBox)
+import           Graphics.Text.TrueType    hiding (BoundingBox)
 
-import           Diagrams.TwoD.Text           hiding (Font)
 import           Diagrams.Prelude
-import           Diagrams.Backend.Rasterific (fromFontStyle)
+import           Diagrams.TwoD.Text        hiding (Font)
+
+import           Paths_diagrams_rasterific (getDataFileName)
+import           System.IO.Unsafe          (unsafePerformIO)
 
 
 
@@ -56,3 +60,32 @@ texterific' fs fw s = recommendFillColor black . fontSizeL 1
 --   Designed to be a replacement for the function 'text' in Diagrams.TwoD.Text.
 texterific :: Renderable (Text Double) b => String -> QDiagram b V2 Double Any
 texterific s = texterific' FontSlantNormal FontWeightNormal s
+
+fromFontStyle :: FontSlant -> FontWeight -> Font
+fromFontStyle FontSlantItalic  FontWeightBold   = openSansBoldItalic
+fromFontStyle FontSlantOblique FontWeightBold   = openSansBoldItalic
+fromFontStyle FontSlantNormal  FontWeightBold   = openSansBold
+fromFontStyle FontSlantItalic  FontWeightNormal = openSansItalic
+fromFontStyle FontSlantOblique FontWeightNormal = openSansItalic
+fromFontStyle _                _                = openSansRegular
+
+-- Read a static font file which is included with the package. This
+-- should be safe as long as it will installed properly.
+staticFont :: String -> Font
+staticFont nm =
+  case unsafePerformIO $ getDataFileName nm >>= loadFontFile of
+    Right f -> f
+    Left e  -> error e
+
+openSansRegular :: Font
+openSansRegular = staticFont "fonts/OpenSans-Regular.ttf"
+
+openSansBold :: Font
+openSansBold = staticFont "fonts/OpenSans-Bold.ttf"
+
+openSansItalic :: Font
+openSansItalic = staticFont "fonts/OpenSans-Italic.ttf"
+
+openSansBoldItalic :: Font
+openSansBoldItalic = staticFont "fonts/OpenSans-BoldItalic.ttf"
+

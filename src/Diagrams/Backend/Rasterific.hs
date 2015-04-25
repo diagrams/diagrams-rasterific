@@ -75,7 +75,9 @@ module Diagrams.Backend.Rasterific
   , size
 
   , writeJpeg
-  , fromFontStyle
+
+  , texterific
+  , texterific'
 
   ) where
 
@@ -84,7 +86,7 @@ import           Diagrams.Core.Transform             (matrixHomRep)
 import           Diagrams.Core.Types
 
 
-import           Diagrams.Prelude                    hiding (opacity, local)
+import           Diagrams.Prelude                    hiding (local, opacity)
 import           Diagrams.TwoD.Adjust                (adjustDia2D)
 import           Diagrams.TwoD.Text                  hiding (Font)
 
@@ -107,6 +109,7 @@ import           Graphics.Text.TrueType
 
 
 import           Control.Monad.Reader
+import           Diagrams.Backend.Rasterific.Text
 
 import qualified Data.ByteString.Lazy                as L (writeFile)
 import qualified Data.Foldable                       as F
@@ -116,9 +119,7 @@ import           Data.Tree
 import           Data.Typeable
 import           Data.Word                           (Word8)
 
-import           Paths_diagrams_rasterific           (getDataFileName)
 import           System.FilePath                     (takeExtension)
-import           System.IO.Unsafe                    (unsafePerformIO)
 
 --------------------------------------------------------------------------------
 -- | This data declaration is simply used as a token to distinguish
@@ -340,38 +341,6 @@ instance TypeableFloat n => Renderable (Path V2 n) Rasterific where
       liftR (R.withTexture (rasterificTexture f o) $ R.fillWithMethod rule prms)
 
     liftR (R.withTexture (rasterificTexture s o) $ mkStroke l j c d primList)
-
--- read only of static data (safe)
-ro :: FilePath -> FilePath
-ro = unsafePerformIO . getDataFileName
-
-openSansRegular :: Font
-openSansRegular = fnt
-  where
-    Right fnt = unsafePerformIO . loadFontFile $ ro "fonts/OpenSans-Regular.ttf"
-
-openSansBold :: Font
-openSansBold = fnt
-  where
-    Right fnt = unsafePerformIO . loadFontFile $ ro "fonts/OpenSans-Bold.ttf"
-
-openSansItalic :: Font
-openSansItalic = fnt
-  where
-    Right fnt = unsafePerformIO . loadFontFile $ ro "fonts/OpenSans-Italic.ttf"
-
-openSansBoldItalic :: Font
-openSansBoldItalic = fnt
-  where
-    Right fnt = unsafePerformIO . loadFontFile $ ro "fonts/OpenSans-BoldItalic.ttf"
-
-fromFontStyle :: FontSlant -> FontWeight -> Font
-fromFontStyle FontSlantItalic FontWeightBold = openSansBoldItalic
-fromFontStyle FontSlantOblique FontWeightBold = openSansBoldItalic
-fromFontStyle FontSlantNormal FontWeightBold = openSansBold
-fromFontStyle FontSlantItalic FontWeightNormal = openSansItalic
-fromFontStyle FontSlantOblique FontWeightNormal = openSansItalic
-fromFontStyle _ _ = openSansRegular
 
 textBox :: Font -> R.PointSize -> String -> (Float, Float)
 textBox f p s = (_xMax bb - _xMin bb, _yMax bb - _yMin bb)
