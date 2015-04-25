@@ -105,9 +105,6 @@ import           Graphics.Rasterific.Texture         (Gradient,
 
 import qualified Graphics.Rasterific.Transformations as R
 
-import           Graphics.Text.TrueType
-
-
 import           Control.Monad.Reader
 import           Diagrams.Backend.Rasterific.Text
 
