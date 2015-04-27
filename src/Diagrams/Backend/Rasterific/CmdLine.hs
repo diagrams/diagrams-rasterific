@@ -1,13 +1,15 @@
+{-# LANGUAGE CPP               #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE TupleSections     #-}
 {-# LANGUAGE TypeFamilies      #-}
+
 {-# OPTIONS_GHC -fno-warn-orphans #-}
-{-# LANGUAGE CPP               #-}
 
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Diagrams.Backend.Rasterific.CmdLine
--- Copyright   :  (c) 2014 Diagrams team (see LICENSE)
+-- Copyright   :  (c) 2014-2015 Diagrams team (see LICENSE)
 -- License     :  BSD-style (see LICENSE)
 -- Maintainer  :  diagrams-discuss@googlegroups.com
 --
@@ -57,65 +59,56 @@
 --
 -----------------------------------------------------------------------------
 module Diagrams.Backend.Rasterific.CmdLine
-        (
-         -- * General form of @main@
-         -- $mainwith
-         mainWith
+  (
+   -- * General form of @main@
+   -- $mainwith
+   mainWith
 
-         -- * Supported forms of @main@
-       , defaultMain
-       , multiMain
-       , animMain
-       , gifMain
+    -- * Supported forms of @main@
+  , defaultMain
+  , multiMain
+  , animMain
+  , gifMain
+  , uniformGifMain
 
-        -- * GIF support
-       , GifOpts(..)
+   -- * GIF support
+  , GifOpts(..)
 
-         -- * Backend tokens
-       , Rasterific
-       , B
-       ) where
+    -- * Backend tokens
+  , Rasterific
+  , B
+  ) where
 
 import           Diagrams.Backend.CmdLine
 import           Diagrams.Backend.Rasterific
 import           Diagrams.Prelude            hiding (height, interval, option,
                                               output, width, (<>))
 
-import           Codec.Picture
-import           Codec.Picture.ColorQuant    (defaultPaletteOptions)
-
 import qualified Data.ByteString.Lazy        as L (writeFile)
 
 import           Options.Applicative
 
-import           Data.List.Split
-
+-- | 'mainWith' specialised to 'Diagram' 'Rasterific'.
 defaultMain :: Diagram Rasterific -> IO ()
 defaultMain = mainWith
 
 instance TypeableFloat n => Mainable (QDiagram Rasterific V2 n Any) where
-    type MainOpts (QDiagram Rasterific V2 n Any) = (DiagramOpts, DiagramLoopOpts)
+  type MainOpts (QDiagram Rasterific V2 n Any) = (DiagramOpts, DiagramLoopOpts)
 
-    mainRender (opts,loopOpts) d = do
-        chooseRender opts d
-        defaultLoopRender loopOpts
+  mainRender (opts,loopOpts) d = do
+      chooseRender opts d
+      defaultLoopRender loopOpts
 
 chooseRender :: TypeableFloat n => DiagramOpts -> QDiagram Rasterific V2 n Any -> IO ()
-chooseRender opts d =
-  case splitOn "." (opts ^. output) of
-    [""] -> putStrLn "No output file given."
-    ps | last ps `elem` ["png", "tif", "bmp", "jpg", "pdf"] -> do
-           let spec = fromIntegral <$> mkSizeSpec2D (opts^.width) (opts^.height)
-               img = renderDia Rasterific (RasterificOptions spec) d
-               V2 w h = specToSize 100 spec
-           case last ps of
-             "png" -> writePng (opts^.output) img
-             "tif" -> writeTiff (opts^.output) img
-             "bmp" -> writeBitmap (opts^.output) img
-             "jpg" -> writeJpeg 80 (opts^.output) img
-             "pdf" -> renderPdf (round w) (round h) (opts^.output) spec d
-             _     -> writePng (opts^.output) img
-       | otherwise -> putStrLn $ "Unknown file type: " ++ last ps
+chooseRender opts d
+  | null path = noFileError
+  | otherwise = renderRasterific path sz d
+  where
+    path = opts^.output
+    sz   = fromIntegral <$> mkSizeSpec2D (opts^.width) (opts^.height)
+
+noFileError :: IO ()
+noFileError = putStrLn "No output file given. Specify output file with -o"
 
 -- | @multiMain@ is like 'defaultMain', except instead of a single
 --   diagram it takes a list of diagrams paired with names as input.
@@ -140,10 +133,10 @@ multiMain :: [(String, Diagram Rasterific)] -> IO ()
 multiMain = mainWith
 
 instance TypeableFloat n => Mainable [(String,QDiagram Rasterific V2 n Any)] where
-    type MainOpts [(String,QDiagram Rasterific V2 n Any)]
-        = (MainOpts (QDiagram Rasterific V2 n Any), DiagramMultiOpts)
+  type MainOpts [(String,QDiagram Rasterific V2 n Any)]
+      = (MainOpts (QDiagram Rasterific V2 n Any), DiagramMultiOpts)
 
-    mainRender = defaultMultiMainRender
+  mainRender = defaultMultiMainRender
 
 -- | @animMain@ is like 'defaultMain', but renders an animation
 -- instead of a diagram.  It takes as input an animation and produces
@@ -168,11 +161,18 @@ instance TypeableFloat n => Mainable (Animation Rasterific V2 n) where
   type MainOpts (Animation Rasterific V2 n) =
     ((DiagramOpts, DiagramAnimOpts), DiagramLoopOpts)
 
-  mainRender (opts, l) d = defaultAnimMainRender chooseRender output opts d
-                        >> defaultLoopRender l
+  mainRender (opts, l) d = do
+    defaultAnimMainRender chooseRender output opts d
+    defaultLoopRender l
 
+-- | Make an animated gif main by pairing diagrams with a delay ('Int'
+--   measured in 100th seconds).
 gifMain :: [(Diagram Rasterific, GifDelay)] -> IO ()
 gifMain = mainWith
+
+-- | Make an animated gif main with the same delay for each diagram.
+uniformGifMain :: GifDelay -> [Diagram Rasterific] -> IO ()
+uniformGifMain i = mainWith . map (,i)
 
 -- | Extra options for animated GIFs.
 data GifOpts = GifOpts { _dither     :: Bool
@@ -201,7 +201,7 @@ instance TypeableFloat n => Mainable [(QDiagram Rasterific V2 n Any, GifDelay)] 
   type MainOpts [(QDiagram Rasterific V2 n Any, GifDelay)] = (DiagramOpts, GifOpts)
 
   mainRender (dOpts, gOpts) ids
-    | null path = putStrLn "No output file given."
+    | null path = noFileError
     | otherwise = case rasterGif sz lOpts pOpts ids of
         Right bs -> L.writeFile path bs
         Left e   -> putStrLn e

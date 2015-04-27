@@ -92,6 +92,7 @@ module Diagrams.Backend.Rasterific
     --   the future. They're exported because they can sometimes be
     --   useful.
   , PaletteOptions (..)
+  , defaultPaletteOptions
   , rasterGif
   , rasterRgb8
 
