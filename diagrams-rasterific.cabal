@@ -22,6 +22,7 @@ Source-repository head
 library
   exposed-modules:     Diagrams.Backend.Rasterific
                        Diagrams.Backend.Rasterific.CmdLine
+                       Diagrams.Backend.Rasterific.Text
   hs-source-dirs:      src
   other-modules:       Paths_diagrams_rasterific
   build-depends:       base >= 4.2 && < 4.9,
