@@ -1,4 +1,6 @@
-# Change Log
+## [v1.3.1.2](https://github.com/diagrams/diagrams-rasterific/tree/v1.3.1.2) (2015-05-26)
+
+[Full Changelog](https://github.com/diagrams/diagrams-rasterific/compare/v1.3.1.1...v1.3.1.2)
 
 ## [v1.3](http://github.com/diagrams/diagrams-rasterific/tree/v1.3) (2015-04-19)
 
