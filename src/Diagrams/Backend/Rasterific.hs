@@ -390,7 +390,7 @@ writeJpeg quality outFile img = L.writeFile outFile bs
 
 -- | Render a 'Rasterific' diagram to a pdf file with given width and height
 renderPdf :: TypeableFloat n => Int -> Int -> FilePath -> SizeSpec V2 n
-                            -> QDiagram Rasterific V2 n Any -> IO ()
+                             -> QDiagram Rasterific V2 n Any -> IO ()
 renderPdf w h outFile spec d = L.writeFile outFile bs
   where
     bs    = R.renderDrawingAtDpiToPDF w h 96 (runRenderM . runR . fromRTree $ rtree)
@@ -415,7 +415,7 @@ renderRasterific outFile spec d =
     ".bmp" -> writeBitmap outFile img
     ".jpg" -> writeJpeg 80 outFile img
     -- pdfs need to be handle separately since rasterific makes them
-    -- directely from drawings. i.e. they don't need to be coverted to images.
+    -- directely from drawings. i.e. they don't need to be converted to images.
     ".pdf" -> renderPdf (round w) (round h) outFile spec d
     _      -> writePng outFile img
   where
