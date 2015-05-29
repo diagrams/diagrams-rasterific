@@ -20,7 +20,7 @@
 --
 -- A full-featured rendering backend for diagrams using Rasterific,
 -- implemented natively in Haskell (making it easy to use on any
--- platform). Can create png, tif, bmp, jpg, and animated GIFs.
+-- platform). Can create png, tif, bmp, jpg, pdf, and animated GIFs.
 --
 -- To invoke the Rasterific backend, you have three options.
 --
@@ -72,6 +72,7 @@ module Diagrams.Backend.Rasterific
   , Options(..)
 
   , renderRasterific
+  , renderPdf
   , size
 
   , writeJpeg
@@ -387,17 +388,36 @@ writeJpeg quality outFile img = L.writeFile outFile bs
   where
     bs = encodeJpegAtQuality quality (pixelMap (convertPixel . dropTransparency) img)
 
--- | Render a 'Rasterific' diagram to a file with the given size. The
---   format is determined by the extension (@.png@, @.tif@, @.bmp@ and
---   @.jpg@ supported. (jpeg quality is 80, use 'writeJpeg' to choose
---   quality).
-renderRasterific :: TypeableFloat n => FilePath -> SizeSpec V2 n -> QDiagram Rasterific V2 n Any -> IO ()
-renderRasterific outFile spec d = writer outFile img
+-- | Render a 'Rasterific' diagram to a pdf file with given width and height
+renderPdf :: TypeableFloat n => Int -> Int -> FilePath -> SizeSpec V2 n
+                             -> QDiagram Rasterific V2 n Any -> IO ()
+renderPdf w h outFile spec d = L.writeFile outFile bs
   where
-    writer = case takeExtension outFile of
-               ".png" -> writePng
-               ".tif" -> writeTiff
-               ".bmp" -> writeBitmap
-               ".jpg" -> writeJpeg 80
-               _      -> writePng
+    bs    = R.renderDrawingAtDpiToPDF w h 96 (runRenderM . runR . fromRTree $ rtree)
+    rtree = rTree spec d
+
+rTree :: TypeableFloat n => SizeSpec V2 n -> QDiagram Rasterific V2 n Any
+                         -> RTree Rasterific V2 n Annotation
+rTree spec d = toRTree g2o d'
+  where
+  (_, g2o, d') = adjustDia Rasterific (RasterificOptions spec) d
+
+-- | Render a 'Rasterific' diagram to a file with the given size. The
+--   format is determined by the extension (@.png@, @.tif@, @.bmp@, @.jpg@ and
+--   @.pdf@ supported. (jpeg quality is 80, use 'writeJpeg' to choose
+--   quality).
+renderRasterific :: TypeableFloat n => FilePath -> SizeSpec V2 n
+                 -> QDiagram Rasterific V2 n Any -> IO ()
+renderRasterific outFile spec d =
+  case takeExtension outFile of
+    ".png" -> writePng outFile img
+    ".tif" -> writeTiff outFile img
+    ".bmp" -> writeBitmap outFile img
+    ".jpg" -> writeJpeg 80 outFile img
+    -- pdfs need to be handle separately since rasterific makes them
+    -- directely from drawings. i.e. they don't need to be converted to images.
+    ".pdf" -> renderPdf (round w) (round h) outFile spec d
+    _      -> writePng outFile img
+  where
     img = renderDia Rasterific (RasterificOptions spec) d
+    V2 w h = specToSize 100 spec
