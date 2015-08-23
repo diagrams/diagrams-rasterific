@@ -7,6 +7,7 @@
 {-# LANGUAGE MultiParamTypeClasses     #-}
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE TemplateHaskell           #-}
+{-# LANGUAGE TupleSections             #-}
 {-# LANGUAGE TypeFamilies              #-}
 {-# LANGUAGE TypeSynonymInstances      #-}
 {-# LANGUAGE ViewPatterns              #-}
@@ -67,18 +68,33 @@
 --
 -------------------------------------------------------------------------------
 module Diagrams.Backend.Rasterific
-  ( Rasterific(..)
+  ( -- * Rasterific backend
+    Rasterific(..)
   , B -- rendering token
   , Options(..)
 
+    -- * Rendering
   , renderRasterific
   , renderPdf
   , size
 
   , writeJpeg
+  , GifDelay
+  , GifLooping (..)
+  , animatedGif
 
+    -- * Text with envelopes
   , texterific
   , texterific'
+
+    -- * Internals
+    -- | These are low level functions whose implimentaion may change in
+    --   the future. They're exported because they can sometimes be
+    --   useful.
+  , PaletteOptions (..)
+  , defaultPaletteOptions
+  , rasterGif
+  , rasterRgb8
 
   ) where
 
@@ -86,16 +102,18 @@ import           Diagrams.Core.Compile
 import           Diagrams.Core.Transform             (matrixHomRep)
 import           Diagrams.Core.Types
 
-
-import           Diagrams.Prelude                    hiding (local, opacity)
+import           Diagrams.Prelude                    hiding (height, local,
+                                                      opacity, output, width)
 import           Diagrams.TwoD.Adjust                (adjustDia2D)
 import           Diagrams.TwoD.Text                  hiding (Font)
 
 import           Codec.Picture
+import           Codec.Picture.ColorQuant            (defaultPaletteOptions)
 import           Codec.Picture.Types                 (convertImage,
                                                       convertPixel,
                                                       dropTransparency,
                                                       promoteImage)
+
 
 import qualified Graphics.Rasterific                 as R
 import           Graphics.Rasterific.Texture         (Gradient,
@@ -109,6 +127,7 @@ import qualified Graphics.Rasterific.Transformations as R
 import           Control.Monad.Reader
 import           Diagrams.Backend.Rasterific.Text
 
+import           Data.ByteString.Lazy                (ByteString)
 import qualified Data.ByteString.Lazy                as L (writeFile)
 import qualified Data.Foldable                       as F
 import           Data.Hashable                       (Hashable (..))
@@ -381,6 +400,8 @@ instance TypeableFloat n => Renderable (DImage n Embedded) Rasterific where
       trl = moveOriginBy (r2 (fromIntegral w / 2, fromIntegral h / 2 :: n)) mempty
       p   = rasterificPtTransf trl (R.V2 0 0)
 
+-- Saving files --------------------------------------------------------
+
 -- | Render a 'Rasterific' diagram to a jpeg file with given quality
 --   (between 0 and 100).
 writeJpeg :: Word8 -> FilePath -> Result Rasterific V2 n -> IO ()
@@ -421,3 +442,42 @@ renderRasterific outFile spec d =
   where
     img = renderDia Rasterific (RasterificOptions spec) d
     V2 w h = specToSize 100 spec
+
+-- | Render a 'Rasterific' diagram to an animated gif with the given
+--   size and uniform delay. Diagrams should be the same size.
+animatedGif
+  :: TypeableFloat n
+  => FilePath
+  -> SizeSpec V2 n
+  -> GifLooping
+  -> GifDelay -- ^ Delay in 100th of seconds ('Int')
+  -> [QDiagram Rasterific V2 n Any] -> IO ()
+animatedGif outFile sz gOpts i ds =
+  case rasterGif sz gOpts defaultPaletteOptions (map (,i) ds) of
+    Right bs -> L.writeFile outFile bs
+    Left e   -> putStrLn e
+
+-- Gifs ----------------------------------------------------------------
+
+-- | Turn a list of diagrams into a gif.
+rasterGif
+  :: TypeableFloat n
+  => SizeSpec V2 n            -- ^ Size of output (in pixels)
+  -> GifLooping               -- ^ looping options
+  -> PaletteOptions           -- ^ palette options
+  -> [(QDiagram Rasterific V2 n Any, Int)]  -- ^ Diagram zipped with its delay (100th of seconds)
+  -> Either String ByteString
+rasterGif sz gOpts pOpts ds = encodeGifImages gOpts (map pal imgs)
+  where
+    imgs = over (each . _1) (rasterRgb8 sz) ds
+    pal (palettize pOpts -> (img,p), d) = (p, d, img)
+
+-- | Render a 'Rasterific' diagram without an alpha channel.
+rasterRgb8 :: TypeableFloat n
+           => SizeSpec V2 n
+           -> QDiagram Rasterific V2 n Any
+           -> Image PixelRGB8
+rasterRgb8 sz
+  = pixelMap dropTransparency
+  . renderDia Rasterific (RasterificOptions sz)
+
