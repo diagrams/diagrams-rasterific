@@ -197,6 +197,13 @@ instance Parseable GifOpts where
                        ( long "loop-repeat"
                       <> help "Number of times to repeat" )
 
+-- | An animated GIF can be a result.
+instance ToResult [(QDiagram Rasterific V2 n Any, GifDelay)] where
+  type Args [(QDiagram Rasterific V2 n Any, GifDelay)] = ()
+  type ResultOf [(QDiagram Rasterific V2 n Any, GifDelay)] = [(QDiagram Rasterific V2 n Any, GifDelay)]
+
+  toResult ds _ = ds
+
 instance TypeableFloat n => Mainable [(QDiagram Rasterific V2 n Any, GifDelay)] where
   type MainOpts [(QDiagram Rasterific V2 n Any, GifDelay)] = (DiagramOpts, GifOpts)
 
