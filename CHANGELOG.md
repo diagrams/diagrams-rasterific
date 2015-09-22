@@ -1,3 +1,9 @@
+## [v1.3.1.4](https://github.com/diagrams/diagrams-rasterific/tree/v1.3.1.4) (2015-09-22)
+
+- allow `lens-4.13`
+
+[Full Changelog](https://github.com/diagrams/diagrams-rasterific/compare/v1.3.1.3...v1.3.1.4)
+
 ## [v1.3.1.3](https://github.com/diagrams/diagrams-rasterific/tree/v1.3.1.3) (2015-07-19)
 
 [Full Changelog](https://github.com/diagrams/diagrams-rasterific/compare/v1.3.1.2...v1.3.1.3)
