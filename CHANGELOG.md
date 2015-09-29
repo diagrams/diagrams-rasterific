@@ -1,3 +1,9 @@
+## [v1.3.1.5](https://github.com/diagrams/diagrams-rasterific/tree/v1.3.1.5) (2015-09-29)
+
+- allow `optparse-applicative-0.12`
+
+[Full Changelog](https://github.com/diagrams/diagrams-rasterific/compare/v1.3.1.4...v1.3.1.5)
+
 ## [v1.3.1.4](https://github.com/diagrams/diagrams-rasterific/tree/v1.3.1.4) (2015-09-22)
 
 - allow `lens-4.13`
