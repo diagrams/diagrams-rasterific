@@ -51,7 +51,7 @@ texterific' fs fw s = recommendFillColor black . fontSizeL 1
                            (getEnvelope bb)
                            (getTrace bb)
                            mempty
-                           (boundingBoxQuery bb)
+                           (getQuery bb)
   where
     bb = textBoundingBox fnt (PointSize 1) s
     fnt = fromFontStyle fs fw
