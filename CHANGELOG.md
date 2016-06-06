@@ -1,3 +1,14 @@
+## [v1.3.1.7](https://github.com/diagrams/diagrams-rasterific/tree/v1.3.1.7) (2016-06-06)
+
+- Allow:
+    - `base-4.9`
+    - `lens-4.14`
+    - `data-default-class-0.1`
+
+- Test with GHC 8.0.1
+
+[Full Changelog](https://github.com/diagrams/diagrams-rasterific/compare/v1.3.1.6...v1.3.1.7)
+
 ## [v1.3.1.6](https://github.com/diagrams/diagrams-rasterific/tree/v1.3.1.6) (2016-05-01)
 
 - allow `lens-4.14`
