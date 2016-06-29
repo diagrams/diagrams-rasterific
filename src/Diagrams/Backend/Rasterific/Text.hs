@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TemplateHaskell       #-}
 
 -------------------------------------------------------------------------------
 -- |
@@ -27,8 +28,9 @@ import           Graphics.Text.TrueType    hiding (BoundingBox)
 import           Diagrams.Prelude
 import           Diagrams.TwoD.Text        hiding (Font)
 
-import           Paths_diagrams_rasterific (getDataFileName)
-import           System.IO.Unsafe          (unsafePerformIO)
+import           Data.FileEmbed            (embedDir)
+import           Data.ByteString           (ByteString)
+import           Data.ByteString.Lazy      (fromStrict)
 
 -- | Get the 'BoundingBox' for some font with the origin at the start of
 --   the baseline.
@@ -72,23 +74,26 @@ fromFontStyle FontSlantItalic  FontWeightNormal = openSansItalic
 fromFontStyle FontSlantOblique FontWeightNormal = openSansItalic
 fromFontStyle _                _                = openSansRegular
 
--- Read a static font file which is included with the package. This
--- should be safe as long as it will installed properly.
+fonts :: [(FilePath,ByteString)]
+fonts = $(embedDir "fonts")
+
+-- Read a static font file which is included with the package.
 staticFont :: String -> Font
-staticFont nm =
-  case unsafePerformIO $ getDataFileName nm >>= loadFontFile of
-    Right f -> f
-    Left e  -> error e
+staticFont nm = case lookup nm fonts of
+   Nothing -> error ("Font not found: " ++ nm)
+   Just f  -> case decodeFont (fromStrict f) of
+                Right r -> r
+                Left e  -> error e
 
 openSansRegular :: Font
-openSansRegular = staticFont "fonts/OpenSans-Regular.ttf"
+openSansRegular = staticFont "OpenSans-Regular.ttf"
 
 openSansBold :: Font
-openSansBold = staticFont "fonts/OpenSans-Bold.ttf"
+openSansBold = staticFont "OpenSans-Bold.ttf"
 
 openSansItalic :: Font
-openSansItalic = staticFont "fonts/OpenSans-Italic.ttf"
+openSansItalic = staticFont "OpenSans-Italic.ttf"
 
 openSansBoldItalic :: Font
-openSansBoldItalic = staticFont "fonts/OpenSans-BoldItalic.ttf"
+openSansBoldItalic = staticFont "OpenSans-BoldItalic.ttf"
 
