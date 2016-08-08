@@ -1,3 +1,19 @@
+## [v1.4](https://github.com/diagrams/diagrams-rasterific/tree/v1.4) (XXX)
+
+* **New features**
+
+    - Can now output PDFs.
+
+    - Font files are now embedded with `file-embed`.
+
+    - Various functions for better GIF support.
+
+    - Support for group opacity.
+
+* **New instances**
+
+    - `ToResult` instance for animated GIFs.
+
 ## [v1.3.1.7](https://github.com/diagrams/diagrams-rasterific/tree/v1.3.1.7) (2016-06-06)
 
 - Allow:
@@ -34,6 +50,20 @@
 ## [v1.3.1.2](https://github.com/diagrams/diagrams-rasterific/tree/v1.3.1.2) (2015-05-26)
 
 [Full Changelog](https://github.com/diagrams/diagrams-rasterific/compare/v1.3.1.1...v1.3.1.2)
+
+## [v1.3.1.1](http://github.com/diagrams/diagrams-rasterific/tree/v1.3.1.1)
+(2015-04-25)
+
+- New module `Diagrams.Backend.Rasterific.Text`
+- New `texterific` function exported from
+  `Diagrams.Backend.Rasterific`
+- Fixes:
+    - Fix bounding box calculation for text
+    - Fix `BoxAlignedText` positioning
+
+## [v1.3.1](http://github.com/diagrams/diagrams-rasterific/tree/v1.3.1.0) (2015-04-25)
+
+- group opacity
 
 ## [v1.3](http://github.com/diagrams/diagrams-rasterific/tree/v1.3) (2015-04-19)
 
