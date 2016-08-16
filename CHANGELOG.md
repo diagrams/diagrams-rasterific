@@ -14,6 +14,10 @@
 
     - `ToResult` instance for animated GIFs.
 
+## [v1.3.1.8](https://github.com/diagrams/diagrams-rasterific/tree/v1.3.1.8) (2016-08-16)
+
+- Allow `optparse-applicative-0.13`
+
 ## [v1.3.1.7](https://github.com/diagrams/diagrams-rasterific/tree/v1.3.1.7) (2016-06-06)
 
 - Allow:
