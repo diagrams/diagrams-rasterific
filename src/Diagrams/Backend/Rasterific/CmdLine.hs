@@ -79,7 +79,7 @@ module Diagrams.Backend.Rasterific.CmdLine
 import           Diagrams.Backend.CmdLine
 import           Diagrams.Backend.Rasterific
 import           Diagrams.Prelude            hiding (height, interval, option,
-                                              output, width, (<>))
+                                              output, width)
 
 import           Codec.Picture
 import           Codec.Picture.ColorQuant    (defaultPaletteOptions)
