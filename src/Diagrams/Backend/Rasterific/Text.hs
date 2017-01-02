@@ -36,7 +36,7 @@ import           Data.ByteString.Lazy      (fromStrict)
 --   the baseline.
 textBoundingBox :: RealFloat n => Font -> PointSize -> String -> BoundingBox V2 n
 textBoundingBox f p s = fromCorners
-                        (mkP2 (2*r2f _xMin bb)              (r2f _yMin bb))
+                        (mkP2 (2*r2f _xMin bb)              (r2f _baselineHeight bb))
                         (mkP2 (r2f _xMax bb + r2f _xMin bb) (r2f _yMax bb))
   where
     r2f = fmap realToFrac
