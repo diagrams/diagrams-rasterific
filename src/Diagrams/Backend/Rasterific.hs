@@ -389,7 +389,7 @@ toImageRGBA8 (ImageYA8 i)    = promoteImage i
 toImageRGBA8 (ImageCMYK8 i)  = promoteImage (convertImage i :: Image PixelRGB8)
 toImageRGBA8 _               = error "Unsupported Pixel type"
 
-instance TypeableFloat n => Renderable (DImage n Embedded) Rasterific where
+instance TypeableFloat n => Renderable (DImage b n Embedded) Rasterific where
   render _ (DImage iD w h tr) = R $ liftR
                                (R.withTransformation
                                (rasterificMatTransf (tr <> reflectionY))
