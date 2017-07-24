@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP               #-}
+{-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE TupleSections     #-}
@@ -79,6 +80,8 @@ module Diagrams.Backend.Rasterific.CmdLine
   , B
   ) where
 
+import           Active
+
 import           Diagrams.Backend.CmdLine
 import           Diagrams.Backend.Rasterific
 import           Diagrams.Prelude            hiding (height, interval, option,
@@ -154,11 +157,11 @@ instance TypeableFloat n => Mainable [(String,QDiagram Rasterific V2 n Any)] whe
 --
 -- The @--fpu@ option can be used to control how many frames will be
 -- output for each second (unit time) of animation.
-animMain :: Animation Rasterific V2 Double -> IO ()
+animMain :: Active Rational 'F (QDiagram Rasterific V2 Double Any) -> IO ()
 animMain = mainWith
 
-instance TypeableFloat n => Mainable (Animation Rasterific V2 n) where
-  type MainOpts (Animation Rasterific V2 n) =
+instance TypeableFloat n => Mainable (Active Rational 'F (QDiagram Rasterific V2 n Any)) where
+  type MainOpts (Active Rational 'F (QDiagram Rasterific V2 n Any)) =
     ((DiagramOpts, DiagramAnimOpts), DiagramLoopOpts)
 
   mainRender (opts, l) d = do
