@@ -1,5 +1,4 @@
 {-# LANGUAGE CPP               #-}
-{-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE TupleSections     #-}
@@ -157,11 +156,11 @@ instance TypeableFloat n => Mainable [(String,QDiagram Rasterific V2 n Any)] whe
 --
 -- The @--fpu@ option can be used to control how many frames will be
 -- output for each second (unit time) of animation.
-animMain :: Active 'F (QDiagram Rasterific V2 Double Any) -> IO ()
+animMain :: Animation Rasterific V2 Double -> IO ()
 animMain = mainWith
 
-instance TypeableFloat n => Mainable (Active 'F (QDiagram Rasterific V2 n Any)) where
-  type MainOpts (Active 'F (QDiagram Rasterific V2 n Any)) =
+instance TypeableFloat n => Mainable (Active (QDiagram Rasterific V2 n Any)) where
+  type MainOpts (Active (QDiagram Rasterific V2 n Any)) =
     ((DiagramOpts, DiagramAnimOpts), DiagramLoopOpts)
 
   mainRender (opts, l) d = do
