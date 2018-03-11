@@ -1,13 +1,16 @@
+{-# LANGUAGE DeriveAnyClass            #-}
 {-# LANGUAGE DeriveDataTypeable        #-}
 {-# LANGUAGE DeriveGeneric             #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts          #-}
 {-# LANGUAGE FlexibleInstances         #-}
 {-# LANGUAGE GADTs                     #-}
+{-# LANGUAGE LambdaCase                #-}
 {-# LANGUAGE MultiParamTypeClasses     #-}
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE TemplateHaskell           #-}
 {-# LANGUAGE TupleSections             #-}
+{-# LANGUAGE TypeApplications          #-}
 {-# LANGUAGE TypeFamilies              #-}
 {-# LANGUAGE TypeSynonymInstances      #-}
 {-# LANGUAGE ViewPatterns              #-}
@@ -25,8 +28,8 @@
 --
 -- To invoke the Rasterific backend, you have three options.
 --
--- * You can use the "Diagrams.Backend.Rasterific.CmdLine" module to create
---   standalone executables which output images when invoked.
+-- * You can use @'mainWith' 'Rasterific'@ to create standalone
+--   executables which output images when invoked.
 --
 -- * You can use the 'renderRasterific' function provided by this module,
 --   which gives you more flexible programmatic control over when and
@@ -36,49 +39,21 @@
 --
 -- * For the most flexibility (/e.g./ if you want access to the
 --   resulting Rasterific value directly in memory without writing it to
---   disk), you can manually invoke the 'renderDia' method from the
---   'Diagrams.Core.Types.Backend' instance for @Rasterific@.  In particular,
---   'Diagrams.Core.Types.renderDia' has the generic type
---
--- > renderDia :: b -> Options b v n -> QDiagram b v n m -> Result b v n
---
--- (omitting a few type class constraints).  @b@ represents the
--- backend type, @v@ the vector space, @n@ the numeric field, and @m@ the type
--- of monoidal query annotations on the diagram.  'Options' and 'Result' are
--- associated data and type families, respectively, which yield the
--- type of option records and rendering results specific to any
--- particular backend.  For @b ~ Rasterific@, @v ~ V2@, and @n ~ n@, we have
---
--- > data Options Rasterific V2 n = RasterificOptions
--- >        { _size      :: SizeSpec2D n -- ^ The requested size of the output
--- >        }
---
--- @
--- type family Result Rasterific V2 n = 'Image PixelRGBA8'
--- @
---
--- So the type of 'renderDia' resolves to
---
--- @
--- renderDia :: Rasterific -> Options Rasterific V2 n -> QDiagram Rasterific V2 n m -> 'Image PixelRGBA8'
--- @
---
--- which you could call like @renderDia Rasterific (RasterificOptions (mkWidth 250))
--- myDiagram@.
+--   disk), you can manually invoke the 'renderImage' function to return
+--   an @'Image' 'PixelRGBA8'
 --
 -------------------------------------------------------------------------------
 module Diagrams.Backend.Rasterific
   ( -- * Rasterific backend
     Rasterific(..)
-  , B -- rendering token
   , Options(..)
 
     -- * Rendering
   , renderRasterific
   , renderPdf
-  , size
+  , renderImage
 
-  , writeJpeg
+  -- , writeJpeg
   , GifDelay
   , GifLooping (..)
   , animatedGif
@@ -94,131 +69,169 @@ module Diagrams.Backend.Rasterific
   , PaletteOptions (..)
   , defaultPaletteOptions
   , rasterGif
-  , rasterRgb8
 
   ) where
 
-import           Diagrams.Core.Compile
-import           Diagrams.Core.Transform             (matrixHomRep)
-import           Diagrams.Core.Types
-
-import           Diagrams.Prelude                    hiding (height, local,
-                                                      opacity, output, width)
-import           Diagrams.TwoD.Adjust                (adjustDia2D)
+import           Diagrams.Backend
+import           Diagrams.Backend.Compile
+import           Diagrams.Prelude                    hiding (clip, opacity,
+                                                      output)
 import           Diagrams.TwoD.Text                  hiding (Font)
+import           Diagrams.Types                      hiding (local)
+import           Geometry.Transform
+import           GHC.Generics
+import qualified Options.Applicative                 as OP
+import           System.IO
 
 import           Codec.Picture
 import           Codec.Picture.ColorQuant            (defaultPaletteOptions)
-import           Codec.Picture.Types                 (convertImage,
-                                                      convertPixel,
-                                                      dropTransparency,
-                                                      promoteImage)
-
-
+import           Codec.Picture.Types                 (convertPixel,
+                                                      dropTransparency)
 import qualified Graphics.Rasterific                 as R
 import           Graphics.Rasterific.Texture         (Gradient,
-                                                      linearGradientTexture, radialGradientWithFocusTexture,
+                                                      linearGradientTexture,
+                                                      radialGradientWithFocusTexture,
                                                       transformTexture,
                                                       uniformTexture,
                                                       withSampler)
-
 import qualified Graphics.Rasterific.Transformations as R
 
-import           Control.Monad.Reader
-import           Diagrams.Backend.Rasterific.Text
-
+import           Control.Monad                       (join, when)
 import           Data.ByteString.Lazy                (ByteString)
 import qualified Data.ByteString.Lazy                as L (writeFile)
 import qualified Data.Foldable                       as F
 import           Data.Hashable                       (Hashable (..))
 import           Data.Maybe                          (fromMaybe)
-import           Data.Tree
+import           Data.Sequence                       (Seq)
 import           Data.Typeable
-import           Data.Word                           (Word8)
-
 import           System.FilePath                     (takeExtension)
+
+import           Diagrams.Backend.Rasterific.Text
+
 
 --------------------------------------------------------------------------------
 -- | This data declaration is simply used as a token to distinguish
 --   the Rasterific backend: (1) when calling functions where the type
 --   inference engine would otherwise have no way to know which
 --   backend you wanted to use, and (2) as an argument to the
---   'Backend' and 'Renderable' type classes.
+--   'Backend' and type classe.
 data Rasterific = Rasterific
   deriving (Eq,Ord,Read,Show,Typeable)
-
-type B = Rasterific
 
 type instance V Rasterific = V2
 type instance N Rasterific = Double
 
--- | The custom monad in which intermediate drawing options take
---   place; 'Graphics.Rasterific.Drawing' is Rasterific's own rendering
---   monad.
-type RenderM n = ReaderT (Style V2 n) RenderR
-
-type RenderR = R.Drawing PixelRGBA8
-
-liftR :: RenderR a -> RenderM n a
-liftR = lift
-
-runRenderM :: TypeableFloat n => RenderM n a -> RenderR a
-runRenderM = flip runReaderT (mempty # recommendFillColor transparent)
+default2DAttrs :: Diagram V2 -> Diagram V2
+default2DAttrs = lineWidth medium
 
 -- From Diagrams.Core.Types.
-instance TypeableFloat n => Backend Rasterific V2 n where
-  newtype Render  Rasterific V2 n = R (RenderM n ())
-  type Result  Rasterific V2 n = Image PixelRGBA8
-  data Options Rasterific V2 n = RasterificOptions
-          { _sizeSpec  :: SizeSpec V2 n -- ^ The requested size of the output
-          }
-    deriving Show
+instance Backend Rasterific where
+  type Result  Rasterific = R.Drawing PixelRGBA8 ()
+  data Options Rasterific = RasterificOptions
+    { rasterificSizeSpec  :: SizeSpec V2 Int
+    } deriving Show
 
-  renderRTree _ opts t =
-    R.renderDrawing (round w) (round h) bgColor r
-    where
-      r       = runRenderM . runR . fromRTree $ t
-      V2 w h  = specToSize 100 (opts^.sizeSpec)
-      bgColor = PixelRGBA8 0 0 0 0
+  backendInfo _ = rasterificInfo
 
-  adjustDia c opts d = adjustDia2D sizeSpec c opts (d # reflectY)
+  renderDiaT opts dia = (sz, t2 <> reflectionY, drawing) where
+    (sz, t2, dia') = adjustSize2D (opts^.sizeSpec) (default2DAttrs dia # reflectY)
+    drawing        = render t2 dia'
 
-fromRTree :: TypeableFloat n => RTree Rasterific V2 n Annotation -> Render Rasterific V2 n
-fromRTree (Node n rs) = case n of
-  RPrim p                 -> render Rasterific p
-  RStyle sty              -> R $ clip sty (local (<> sty) r)
-  RAnnot (OpacityGroup x) -> R $ mapReaderT (R.withGroupOpacity (round $ 255 * x)) r
-  _                       -> R r
-  where R r = F.foldMap fromRTree rs
+instance BackendBuild Rasterific where
+  saveDiagram' path (RasterificOptions sz) = renderRasterific path sz
 
--- | Clip a render using the Clip from the style.
-clip :: TypeableFloat n => Style V2 n -> RenderM n () -> RenderM n ()
-clip sty r = go (sty ^. _clip)
-  where
-    go []     = r
-    go (p:ps) = mapReaderT (R.withClipping $ R.fill (renderPath p)) (go ps)
+  mkOptions    = RasterificOptions
+  sizeSpec f o = RasterificOptions <$> f (rasterificSizeSpec o)
+  showOptions  = show
 
-runR :: Render Rasterific V2 n -> RenderM n ()
-runR (R r) = r
-
-instance Monoid (Render Rasterific V2 n) where
-  mempty = R $ return ()
-  R rd1 `mappend` R rd2 = R (rd1 >> rd2)
-
-instance Hashable n => Hashable (Options Rasterific V2 n) where
+instance Hashable (Options Rasterific) where
   hashWithSalt s (RasterificOptions sz) = s `hashWithSalt` sz
 
-sizeSpec :: Lens' (Options Rasterific V2 n) (SizeSpec V2 n)
-sizeSpec = lens _sizeSpec (\o s -> o {_sizeSpec = s})
+type Draw = R.Drawing PixelRGBA8 ()
 
-rasterificStrokeStyle :: TypeableFloat n => Style v n
-                     -> (n, R.Join, (R.Cap, R.Cap), Maybe (R.DashPattern, n))
-rasterificStrokeStyle s = (strokeWidth, strokeJoin, (strokeCap, strokeCap), strokeDash)
+render :: T2 Double -> Diagram V2 -> Draw
+render = foldDiaA renderPrim renderAnnot where
+  renderPrim t2 attrs prim =
+    case renderPrimitive t2 attrs prim of
+      Just r  -> r
+      Nothing -> error "Unknown primitive"
+
+renderPrimitive
+  :: T2 Double -> Attributes -> Prim V2 Double -> Maybe Draw
+renderPrimitive t2 attrs = \case
+  Path_ path         -> Just $ drawPath attrs (transform t2 path)
+  Text_ t            -> Just $ drawText t2 attrs t
+  EmbeddedImage_ img -> Just $ drawImage t2 img
+  Prim _             -> Nothing
+
+renderAnnot :: Annotation V2 Double -> Draw -> Draw
+renderAnnot = \case
+  GroupOpacity_ x -> R.withGroupOpacity (round $ 255 * x)
+  Clip_ c         -> clip c
+  _               -> id
+
+-- Drawing -------------------------------------------------------------
+
+clip :: Seq (Path V2 Double) -> Draw -> Draw
+clip ps r = foldr (\p -> R.withClipping (R.fill $ pathPrims p)) r ps
+
+drawPath :: Attributes -> Path V2 Double -> Draw
+drawPath s path = do
+  let attr :: (Default a, Typeable a) => Getting r a r -> r
+      attr g   = fromMaybe (def^.g) $ getAttr g s
+  let opa      = attr _Opacity
+      fTexture = fromTexture (attr _FillTexture) opa
+      fRule    = fromFillRule (attr _FillRule)
+      lTexture = fromTexture (attr _LineTexture) opa
+      lJoin    = fromLineJoin (attr _LineJoin)
+      lWidth   = realToFrac @Double $ attr _LineWidth
+      lCaps    = join (,) $ fromLineCap (attr _LineCap)
+      lDash    = fmap fromDashing (getAttr _Dashing s)
+
+  -- XXX Need to separate lines and loops
+  let canFill = (attr _FillTexture ^? _AC) /= Just transparent
+
+  let prims = pathPrims path
+
+  when canFill $
+    R.withTexture fTexture $ R.fillWithMethod fRule (concat prims)
+
+  R.withTexture lTexture $
+    case lDash of
+      Nothing      -> F.for_ prims $ R.stroke lWidth lJoin lCaps
+      Just (d,off) ->
+        F.for_ prims $
+          R.dashedStrokeWithOffset off d lWidth lJoin lCaps
+
+drawText :: T2 Double -> Attributes -> Text Double -> Draw
+drawText tr attrs (Text a str) = do
+  let attr :: (Default a, Typeable a) => Getting r a r -> r
+      attr g   = fromMaybe (def^.g) $ getAttr g attrs
+      lerp' t u v = realToFrac $ t * u + (1 - t) * v
+
+      opa      = attr _Opacity
+      fSize    = R.PointSize . realToFrac @Double $ attr _FontSize
+      fStyle   = fromFontStyle (attr _FontSlant) (attr _FontWeight)
+      fTexture = fromTexture (attr _FillTexture) opa
+      bb       = textBoundingBox fStyle fSize str
+      fAlign   =
+        case a of
+          BaselineText         -> R.V2 0 0
+          BoxAlignedText xt yt -> case getCorners bb of
+            Just (P (V2 xl yl), P (V2 xu yu)) -> R.V2 (-lerp' xt xu xl) (lerp' yt yu yl)
+            Nothing                           -> R.V2 0 0
+
+  R.withTransformation (fromT2 (tr <> reflectionY))
+     (R.withTexture fTexture $ R.printTextAt fStyle fSize fAlign str)
+
+drawImage :: T2 Double -> DynamicImage -> Draw
+drawImage tr (convertRGBA8 -> img@(Image w h _)) = R.withTransformation t d
   where
-    strokeWidth = views _lineWidthU (fromMaybe 1) s
-    strokeJoin  = views _lineJoin   fromLineJoin s
-    strokeCap   = views _lineCap    fromLineCap s
-    strokeDash  = views _dashingU   (fmap fromDashing) s
+    d = R.drawImage img 0 p
+    t = fromT2 (tr <> reflectionY)
+    p = R.V2 (- fromIntegral w /2) (- fromIntegral h / 2)
+
+-- Converting primitives -----------------------------------------------
 
 fromLineCap :: LineCap -> R.Cap
 fromLineCap LineCapButt   = R.CapStraight 0
@@ -230,254 +243,194 @@ fromLineJoin LineJoinMiter = R.JoinMiter 0
 fromLineJoin LineJoinRound = R.JoinRound
 fromLineJoin LineJoinBevel = R.JoinMiter 1
 
-fromDashing :: Real n => Dashing n -> (R.DashPattern, n)
-fromDashing (Dashing ds d) = (map realToFrac ds, d)
+fromDashing :: Dashing Double -> (R.DashPattern, Float)
+fromDashing (Dashing ds d) = (map realToFrac ds, realToFrac d)
 
 fromFillRule :: FillRule -> R.FillMethod
 fromFillRule EvenOdd = R.FillEvenOdd
 fromFillRule _       = R.FillWinding
 
-rasterificColor :: SomeColor -> Double -> PixelRGBA8
-rasterificColor c o = PixelRGBA8 r g b a
+fromColour :: AlphaColour Double -> Double -> PixelRGBA8
+fromColour c o = PixelRGBA8 (w r) (w g) (w b) (w $ o*a)
   where
-    (r, g, b, a) = (int r', int g', int b', int (o * a'))
-    (r', g', b', a') = colorToSRGBA (toAlphaColour c)
-    int x = round (255 * x)
+    (r, g, b, a) = colorToSRGBA c
+    w x = round (255 * x)
 
-rasterificSpreadMethod :: SpreadMethod -> R.SamplerRepeat
-rasterificSpreadMethod GradPad     = R.SamplerPad
-rasterificSpreadMethod GradReflect = R.SamplerReflect
-rasterificSpreadMethod GradRepeat  = R.SamplerRepeat
+fromSpreadMethod :: SpreadMethod -> R.SamplerRepeat
+fromSpreadMethod GradPad     = R.SamplerPad
+fromSpreadMethod GradReflect = R.SamplerReflect
+fromSpreadMethod GradRepeat  = R.SamplerRepeat
 
-rasterificStops :: TypeableFloat n => [GradientStop n] -> Gradient PixelRGBA8
-rasterificStops = map fromStop
+fromGradientStops :: [GradientStop] -> Gradient PixelRGBA8
+fromGradientStops = map $ \(GradientStop c v) -> (realToFrac v, fromColour c 1)
+
+fromLinearGradient :: LGradient -> R.Texture PixelRGBA8
+fromLinearGradient g = transformTexture tr tx
   where
-    fromStop (GradientStop c v) = (realToFrac v, rasterificColor c 1)
-
-rasterificLinearGradient :: TypeableFloat n => LGradient n -> R.Texture PixelRGBA8
-rasterificLinearGradient g = transformTexture tr tx
-  where
-    tr = rasterificMatTransf (inv $ g^.lGradTrans)
+    tr = fromT2 (inv $ g^.gradientTransform)
     tx = withSampler spreadMethod (linearGradientTexture gradDef p0 p1)
-    spreadMethod = rasterificSpreadMethod (g^.lGradSpreadMethod)
-    gradDef = rasterificStops (g^.lGradStops)
-    p0 = p2v2 (g^.lGradStart)
-    p1 = p2v2 (g^.lGradEnd)
+    spreadMethod = fromSpreadMethod (g^.gradientSpreadMethod)
+    gradDef = fromGradientStops (g^.gradientStops)
+    p0 = fromP2 (g^.gradientStart)
+    p1 = fromP2 (g^.gradientEnd)
 
-rasterificRadialGradient :: TypeableFloat n => RGradient n -> R.Texture PixelRGBA8
-rasterificRadialGradient g = transformTexture tr tx
+fromRadialGradient :: RGradient -> R.Texture PixelRGBA8
+fromRadialGradient g = transformTexture tr tx
   where
-    tr = rasterificMatTransf (inv $ g^.rGradTrans)
+    tr = fromT2 (inv $ g^.gradientTransform)
     tx = withSampler spreadMethod (radialGradientWithFocusTexture gradDef c (realToFrac r1) f)
-    spreadMethod = rasterificSpreadMethod (g^.rGradSpreadMethod)
-    c = p2v2 (g^.rGradCenter1)
-    f = p2v2 (g^.rGradCenter0)
-    gradDef = rasterificStops ss
+    spreadMethod = fromSpreadMethod (g^.gradientSpreadMethod)
+    c = fromP2 (g^.gradientCenter1)
+    f = fromP2 (g^.gradientCenter0)
+    gradDef = fromGradientStops ss
 
     -- Adjust the stops so that the gradient begins at the perimeter of
     -- the inner circle (center0, radius0) and ends at the outer circle.
-    r0 = g^.rGradRadius0
-    r1 = g^.rGradRadius1
+    r0 = g^.gradientRadius0
+    r1 = g^.gradientRadius1
     stopFracs = r0 / r1 : map (\s -> (r0 + (s^.stopFraction) * (r1 - r0)) / r1)
-                (g^.rGradStops)
-    gradStops = case g^.rGradStops of
+                (g^.gradientStops)
+    gradStops = case g^.gradientStops of
       []       -> []
       xs@(x:_) -> x : xs
     ss = zipWith (\gs sf -> gs & stopFraction .~ sf ) gradStops stopFracs
 
 -- Convert a diagrams @Texture@ and opacity to a rasterific texture.
-rasterificTexture :: TypeableFloat n => Texture n -> Double -> R.Texture PixelRGBA8
-rasterificTexture (SC c) o = uniformTexture $ rasterificColor c o
-rasterificTexture (LG g) _ = rasterificLinearGradient g
-rasterificTexture (RG g) _ = rasterificRadialGradient g
+fromTexture :: Texture -> Double -> R.Texture PixelRGBA8
+fromTexture (SC c) o = uniformTexture $ fromColour (toAlphaColour c) o
+fromTexture (LG g) _ = fromLinearGradient g
+fromTexture (RG g) _ = fromRadialGradient g
 
-p2v2 :: Real n => P2 n -> R.Point
-p2v2 (P v) = r2v2 v
-{-# INLINE p2v2 #-}
+fromP2 :: P2 Double -> R.Point
+fromP2 (P v) = fromV2 v
 
-r2v2 :: Real n => V2 n -> R.Point
-r2v2 (V2 x y) = R.V2 (realToFrac x) (realToFrac y)
-{-# INLINE r2v2 #-}
+fromV2 :: V2 Double -> R.Point
+fromV2 (V2 x y) = R.V2 (realToFrac x) (realToFrac y)
 
-rv2 :: (Real n, Fractional n) => Iso' R.Point (P2 n)
-rv2 = iso (\(R.V2 x y) -> V2 (realToFrac x) (realToFrac y)) r2v2 . from _Point
-{-# INLINE rv2 #-}
-
-rasterificPtTransf :: TypeableFloat n => T2 n -> R.Point -> R.Point
-rasterificPtTransf t = over rv2 (papply t)
-
-rasterificMatTransf :: TypeableFloat n => T2 n -> R.Transformation
-rasterificMatTransf tr = R.Transformation a c e b d f
+fromT2 :: T2 Double -> R.Transformation
+fromT2 (T m _ v) = R.Transformation a c e b d f
   where
-    [[a, b], [c, d], [e, f]] = map realToFrac <$> matrixHomRep tr
+    V2 (V2 a b) (V2 c d) = (fmap.fmap) realToFrac m
+    V2 e f               = fmap realToFrac v
 
--- Note: Using view patterns confuses ghc to think there are missing patterns,
--- so we avoid them here.
-renderSeg :: TypeableFloat n => Located (Segment Closed V2 n) -> R.Primitive
-renderSeg l =
-  case viewLoc l of
-    (p, Linear (OffsetClosed v)) ->
-      R.LinePrim $ R.Line p' (p' + r2v2 v)
+segPrim :: Located (Segment V2 Double) -> R.Primitive
+segPrim (viewLoc -> (fromP2 -> p, s)) =
+  case s of
+    Linear v       -> R.LinePrim $ R.Line p (p + fromV2 v)
+    Cubic u1 u2 u3 -> R.CubicBezierPrim $ R.CubicBezier q0 q1 q2 q3
       where
-        p' = p2v2 p
-    (p, Cubic u1 u2 (OffsetClosed u3)) ->
-      R.CubicBezierPrim $ R.CubicBezier q0 q1 q2 q3
-      where
-        (q0, q1, q2, q3) = (p2v2 p, q0 + r2v2 u1, q0 + r2v2 u2, q0 + r2v2 u3)
+        (q0, q1, q2, q3) = (p, q0 + fromV2 u1, q0 + fromV2 u2, q0 + fromV2 u3)
 
-renderPath :: TypeableFloat n => Path V2 n -> [[R.Primitive]]
-renderPath p = (map . map) renderSeg (pathLocSegments p)
+pathPrims :: Path V2 Double -> [[R.Primitive]]
+pathPrims p = (map . map) segPrim (pathLocSegments p)
 
--- Stroke both dashed and solid lines.
-mkStroke :: TypeableFloat n => n ->  R.Join -> (R.Cap, R.Cap) -> Maybe (R.DashPattern, n)
-      -> [[R.Primitive]] -> RenderR ()
-mkStroke (realToFrac -> l) j c d primList =
-  maybe (mapM_ (R.stroke l j c) primList)
-        (\(dsh, off) -> mapM_ (R.dashedStrokeWithOffset (realToFrac off) dsh l j c) primList)
-        d
-
-instance TypeableFloat n => Renderable (Path V2 n) Rasterific where
-  render _ p = R $ do
-    sty <- ask
-    let f = sty ^. _fillTexture
-        s = sty ^. _lineTexture
-        o = sty ^. _opacity
-        r = sty ^. _fillRule
-
-        (l, j, c, d) = rasterificStrokeStyle sty
-        canFill      = anyOf (_head . located) isLoop p && (f ^? _AC) /= Just transparent
-        rule         = fromFillRule r
-
-        -- For stroking we need to keep all of the contours separate.
-        primList = renderPath p
-
-        -- For filling we need to concatenate them into a flat list.
-        prms = concat primList
-
-    when canFill $
-      liftR (R.withTexture (rasterificTexture f o) $ R.fillWithMethod rule prms)
-
-    liftR (R.withTexture (rasterificTexture s o) $ mkStroke l j c d primList)
-
-instance TypeableFloat n => Renderable (Text n) Rasterific where
-  render _ (Text tr al str) = R $ do
-    fs    <- views _fontSizeU (fromMaybe 12)
-    slant <- view _fontSlant
-    fw    <- view _fontWeight
-    f     <- view _fillTexture
-    o     <- view _opacity
-    let fColor = rasterificTexture f o
-        fs'    = R.PointSize (realToFrac fs)
-        fnt    = fromFontStyle slant fw
-        bb     = textBoundingBox fnt fs' str
-        p      = case al of
-          BaselineText         -> R.V2 0 0
-          BoxAlignedText xt yt -> case getCorners bb of
-            Just (P (V2 xl yl), P (V2 xu yu)) -> R.V2 (-lerp' xt xu xl) (lerp' yt yu yl)
-            Nothing                           -> R.V2 0 0
-    liftR (R.withTransformation (rasterificMatTransf (tr <> reflectionY))
-          (R.withTexture fColor $ R.printTextAt fnt fs' p str))
-    where
-      lerp' t u v = realToFrac $ t * u + (1 - t) * v
-
-toImageRGBA8 :: DynamicImage -> Image PixelRGBA8
-toImageRGBA8 (ImageRGBA8 i)  = i
-toImageRGBA8 (ImageRGB8 i)   = promoteImage i
-toImageRGBA8 (ImageYCbCr8 i) = promoteImage (convertImage i :: Image PixelRGB8)
-toImageRGBA8 (ImageY8 i)     = promoteImage i
-toImageRGBA8 (ImageYA8 i)    = promoteImage i
-toImageRGBA8 (ImageCMYK8 i)  = promoteImage (convertImage i :: Image PixelRGB8)
-toImageRGBA8 _               = error "Unsupported Pixel type"
-
-instance TypeableFloat n => Renderable (DImage n Embedded) Rasterific where
-  render _ (DImage iD w h tr) = R $ liftR
-                               (R.withTransformation
-                               (rasterificMatTransf (tr <> reflectionY))
-                               (R.drawImage img 0 p))
-    where
-      ImageRaster dImg = iD
-      img = toImageRGBA8 dImg
-      trl = moveOriginBy (r2 (fromIntegral w / 2, fromIntegral h / 2 :: n)) mempty
-      p   = rasterificPtTransf trl (R.V2 0 0)
-
--- Saving files --------------------------------------------------------
-
--- | Render a 'Rasterific' diagram to a jpeg file with given quality
---   (between 0 and 100).
-writeJpeg :: Word8 -> FilePath -> Result Rasterific V2 n -> IO ()
-writeJpeg quality outFile img = L.writeFile outFile bs
-  where
-    bs = encodeJpegAtQuality quality (pixelMap (convertPixel . dropTransparency) img)
+-- Rendering -----------------------------------------------------------
 
 -- | Render a 'Rasterific' diagram to a pdf file with given width and height
-renderPdf :: TypeableFloat n => Int -> Int -> FilePath -> SizeSpec V2 n
-                             -> QDiagram Rasterific V2 n Any -> IO ()
-renderPdf w h outFile spec d = L.writeFile outFile bs
+renderPdf :: Options Rasterific -> Diagram V2 -> ByteString
+renderPdf opts dia = R.renderDrawingAtDpiToPDF w h 96 drawing
   where
-    bs    = R.renderDrawingAtDpiToPDF w h 96 (runRenderM . runR . fromRTree $ rtree)
-    rtree = rTree spec d
+    (fmap round -> V2 w h, _, drawing) = renderDiaT opts dia
 
-rTree :: TypeableFloat n => SizeSpec V2 n -> QDiagram Rasterific V2 n Any
-                         -> RTree Rasterific V2 n Annotation
-rTree spec d = toRTree g2o d'
+renderImage :: SizeSpec V2 Int -> Diagram V2 -> Image PixelRGBA8
+renderImage sz dia = R.renderDrawing w h bgColor drawing
   where
-  (_, g2o, d') = adjustDia Rasterific (RasterificOptions spec) d
+    (fmap round -> V2 w h, _, drawing) = renderDiaT (RasterificOptions sz) dia
+    bgColor = PixelRGBA8 0 0 0 0
 
 -- | Render a 'Rasterific' diagram to a file with the given size. The
 --   format is determined by the extension (@.png@, @.tif@, @.bmp@, @.jpg@ and
 --   @.pdf@ supported. (jpeg quality is 80, use 'writeJpeg' to choose
 --   quality).
-renderRasterific :: TypeableFloat n => FilePath -> SizeSpec V2 n
-                 -> QDiagram Rasterific V2 n Any -> IO ()
-renderRasterific outFile spec d =
-  case takeExtension outFile of
-    ".png" -> writePng outFile img
-    ".tif" -> writeTiff outFile img
-    ".bmp" -> writeBitmap outFile img
-    ".jpg" -> writeJpeg 80 outFile img
-    -- pdfs need to be handle separately since rasterific makes them
-    -- directely from drawings. i.e. they don't need to be converted to images.
-    ".pdf" -> renderPdf (round w) (round h) outFile spec d
-    _      -> writePng outFile img
+renderRasterific :: FilePath -> SizeSpec V2 Int -> Diagram V2 -> IO ()
+renderRasterific outPath spec d =
+  case takeExtension outPath of
+    ".png"  -> L.writeFile outPath (encodePng img)
+    ".tif"  -> L.writeFile outPath (encodeTiff img)
+    ".bmp"  -> L.writeFile outPath (encodeBitmap img)
+    ".jpg"  -> L.writeFile outPath (encodeJpeg imgYCbCr8)
+    ".jpeg" -> L.writeFile outPath (encodeJpeg imgYCbCr8)
+    ".pdf"  -> L.writeFile outPath pdf
+    _       -> writePng outPath img
   where
-    img = renderDia Rasterific (RasterificOptions spec) d
-    V2 w h = specToSize 100 spec
+    (sz,_,drawing) = renderDiaT (RasterificOptions spec) d
+    img            = R.renderDrawing w h (PixelRGBA8 0 0 0 0) drawing
+    imgYCbCr8      = pixelMap (convertPixel . dropTransparency) img
+    pdf            = R.renderDrawingAtDpiToPDF w h 96 drawing
+    V2 w h         = fmap round sz
+
+-- Gifs ----------------------------------------------------------------
 
 -- | Render a 'Rasterific' diagram to an animated gif with the given
 --   size and uniform delay. Diagrams should be the same size.
 animatedGif
-  :: TypeableFloat n
-  => FilePath
-  -> SizeSpec V2 n
+  :: FilePath
+  -> SizeSpec V2 Int
   -> GifLooping
   -> GifDelay -- ^ Delay in 100th of seconds ('Int')
-  -> [QDiagram Rasterific V2 n Any] -> IO ()
+  -> [Diagram V2]
+  -> IO ()
 animatedGif outFile sz gOpts i ds =
   case rasterGif sz gOpts defaultPaletteOptions (map (,i) ds) of
     Right bs -> L.writeFile outFile bs
     Left e   -> putStrLn e
 
--- Gifs ----------------------------------------------------------------
-
 -- | Turn a list of diagrams into a gif.
 rasterGif
-  :: TypeableFloat n
-  => SizeSpec V2 n            -- ^ Size of output (in pixels)
-  -> GifLooping               -- ^ looping options
-  -> PaletteOptions           -- ^ palette options
-  -> [(QDiagram Rasterific V2 n Any, Int)]  -- ^ Diagram zipped with its delay (100th of seconds)
+  :: SizeSpec V2 Int      -- ^ Size of output (in pixels)
+  -> GifLooping           -- ^ looping options
+  -> PaletteOptions       -- ^ palette options
+  -> [(Diagram V2, Int)]  -- ^ Diagram zipped with its delay (100th of seconds)
   -> Either String ByteString
 rasterGif sz gOpts pOpts ds = encodeGifImages gOpts (map pal imgs)
   where
-    imgs = over (each . _1) (rasterRgb8 sz) ds
+    imgs = over (each . _1) (pixelMap dropTransparency . renderImage sz) ds
     pal (palettize pOpts -> (img,p), d) = (p, d, img)
 
--- | Render a 'Rasterific' diagram without an alpha channel.
-rasterRgb8 :: TypeableFloat n
-           => SizeSpec V2 n
-           -> QDiagram Rasterific V2 n Any
-           -> Image PixelRGB8
-rasterRgb8 sz
-  = pixelMap dropTransparency
-  . renderDia Rasterific (RasterificOptions sz)
+-- CmdLine -------------------------------------------------------------
+
+instance RenderOutcome Rasterific (Diagram V2) where
+  type MainOpts Rasterific (Diagram V2) = (FilePath, SizeSpec V2 Int)
+
+  resultParser _ _ = (,) <$> outputParser <*> sizeParser
+  renderOutcome _ (path, sz) = saveDiagram' path (mkOptions @Rasterific sz)
+
+-- | Extra options for animated GIFs.
+data GifOpts = GifOpts
+  { _dither     :: Bool
+  , _noLooping  :: Bool
+  , _loopRepeat :: Maybe Int
+  } deriving (Show, Eq, Ord, Generic, Hashable)
+
+makeLenses ''GifOpts
+
+-- | Command line parser for 'GifOpts':
+--     - @--dither@ turn dithering on.
+--     - @--looping-off@ turn looping off, i.e play GIF once.
+--     - @--loop-repeat INT@ number of times to repeat the GIF after the first playing.
+--       this option is only used if @--looping-off@ is not set.
+gifOptsParser :: OP.Parser GifOpts
+gifOptsParser =
+  GifOpts
+    <$> OP.switch (OP.long "dither" <> OP.help "Turn on dithering.")
+    <*> OP.switch (OP.long "looping-off" <> OP.help "Turn looping off")
+    <*> (OP.optional . OP.option OP.auto)
+      (OP.long "loop-repeat" <> OP.help "Number of times to repeat")
+
+-- | An animated GIF can be a result.
+instance RenderOutcome Rasterific [(Diagram V2, GifDelay)] where
+  type MainOpts Rasterific [(Diagram V2, GifDelay)] = (FilePath, SizeSpec V2 Int, GifOpts)
+  resultParser _ _ = (,,) <$> outputParser <*> sizeParser <*> gifOptsParser
+
+  renderOutcome _ (path, sz, gOpts) ids
+    | null path = hPutStrLn stderr "No output file given. Specify output file with -o"
+    | otherwise = case rasterGif sz lOpts pOpts ids of
+        Right bs -> L.writeFile path bs
+        Left e   -> hPutStrLn stderr e
+    where
+      lOpts
+        | gOpts^.noLooping = LoopingNever
+        | otherwise        = maybe LoopingForever (LoopingRepeat . fromIntegral)
+                               (gOpts^.loopRepeat)
+      pOpts = defaultPaletteOptions {enableImageDithering=gOpts^.dither}
 

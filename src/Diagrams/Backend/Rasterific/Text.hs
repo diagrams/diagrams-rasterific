@@ -26,6 +26,7 @@ module Diagrams.Backend.Rasterific.Text
 import           Graphics.Text.TrueType    hiding (BoundingBox)
 
 import           Diagrams.Prelude
+import           Diagrams.Types
 import           Diagrams.TwoD.Text        hiding (Font)
 
 import           Data.FileEmbed            (embedDir)
@@ -45,14 +46,12 @@ textBoundingBox f p s = fromCorners
 -- | Create a primitive text diagram from the given 'FontSlant',
 --   'FontWeight', and string, with baseline alignment, envelope and trace
 --   based on the 'BoundingBox' of the text.
-texterific' :: (TypeableFloat n, Renderable (Text n) b)
-            => FontSlant -> FontWeight -> String -> QDiagram b V2 n Any
-texterific' fs fw s = recommendFillColor black . fontSizeL 1
+texterific' :: FontSlant -> FontWeight -> String -> Diagram V2
+texterific' fs fw s = backupFillColor black . fontSizeL 1
                     . fontSlant fs . fontWeight fw
-                    $ mkQD (Prim $ Text mempty BaselineText s)
+                    $ mkQD (Prim $ Text BaselineText s)
                            (getEnvelope bb)
                            (getTrace bb)
-                           mempty
                            (getQuery bb)
   where
     bb = textBoundingBox fnt (PointSize 1) s
@@ -62,7 +61,7 @@ texterific' fs fw s = recommendFillColor black . fontSizeL 1
 --   baseline alignment, envelope and trace based on the 'BoundingBox'
 --   of the text.  Designed to be a replacement for the function 'text'
 --   in Diagrams.TwoD.Text.
-texterific :: (TypeableFloat n, Renderable (Text n) b) => String -> QDiagram b V2 n Any
+texterific :: String -> Diagram V2
 texterific s = texterific' FontSlantNormal FontWeightNormal s
 
 -- | Get an OpenSans font with the given 'FontSlant' and 'FontWeight'.
