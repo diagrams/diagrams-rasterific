@@ -53,3 +53,13 @@ test-suite test0
                        diagrams-core >= 1.4 && < 1.5,
                        diagrams-lib >= 1.4 && < 1.5
   ghc-options:         -Wall
+
+test-suite test1
+  type:                exitcode-stdio-1.0
+  main-is:             test1.hs
+  hs-source-dirs:      test
+  build-depends:       base >= 4.2 && < 4.11,
+                       diagrams-rasterific,
+                       diagrams-core >= 1.4 && < 1.5,
+                       diagrams-lib >= 1.4 && < 1.5
+  ghc-options:         -Wall
