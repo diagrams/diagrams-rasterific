@@ -332,8 +332,8 @@ renderPath p = (map . map) renderSeg (pathLocSegments p)
 mkStroke :: TypeableFloat n => n ->  R.Join -> (R.Cap, R.Cap) -> Maybe (R.DashPattern, n)
       -> [[R.Primitive]] -> RenderR ()
 mkStroke (realToFrac -> l) j c d primList =
-  maybe (mapM_ (R.stroke l j c) primList)
-        (\(dsh, off) -> mapM_ (R.dashedStrokeWithOffset (realToFrac off) dsh l j c) primList)
+  maybe (R.stroke l j c $ concat primList)
+        (\(dsh, off) -> R.dashedStrokeWithOffset (realToFrac off) dsh l j c $ concat primList)
         d
 
 instance TypeableFloat n => Renderable (Path V2 n) Rasterific where
