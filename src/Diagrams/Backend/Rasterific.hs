@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                       #-}
 {-# LANGUAGE DeriveDataTypeable        #-}
 {-# LANGUAGE DeriveGeneric             #-}
 {-# LANGUAGE ExistentialQuantification #-}
@@ -201,9 +202,14 @@ clip sty r = go (sty ^. _clip)
 runR :: Render Rasterific V2 n -> RenderM n ()
 runR (R r) = r
 
+instance Semigroup (Render Rasterific V2 n) where
+  R rd1 <> R rd2 = R (rd1 >> rd2)
+
 instance Monoid (Render Rasterific V2 n) where
   mempty = R $ return ()
-  R rd1 `mappend` R rd2 = R (rd1 >> rd2)
+#if !MIN_VERSION_base(4,11,0)
+  mappend = (<>)
+#endif
 
 instance Hashable n => Hashable (Options Rasterific V2 n) where
   hashWithSalt s (RasterificOptions sz) = s `hashWithSalt` sz
