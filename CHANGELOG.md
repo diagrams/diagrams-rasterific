@@ -1,3 +1,11 @@
+## [v1.4.1](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.1) (2018-05-09)
+
+    - Bug fix: stroke entire paths at once ([#42](https://github.com/diagrams/diagrams-rasterific/issues/42))
+    - New `Semigroup (Render Rasterific V2 n)` instance
+    - Allow:
+        - `base-4.11` (GHC 8.4)
+        - `lens-4.16`
+
 ## [v1.4](https://github.com/diagrams/diagrams-rasterific/tree/v1.4) (2016-10-26)
 
 * **New features**
