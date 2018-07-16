@@ -16,5 +16,5 @@ sizeSpec = mkSizeSpec2D (Just 600) Nothing
 
 main :: IO ()
 main = do
-  renderRasterific "test1.png" sizeSpec dia
-  renderRasterific "test1.pdf" sizeSpec dia
+  renderRasterific "test-widths.png" sizeSpec dia
+  renderRasterific "test-widths.pdf" sizeSpec dia

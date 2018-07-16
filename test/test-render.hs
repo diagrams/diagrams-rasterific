@@ -10,5 +10,4 @@ sizeSpec :: SizeSpec V2 Double
 sizeSpec = mkSizeSpec2D (Just 600) Nothing
 
 main :: IO ()
-main = renderRasterific "test0.png" sizeSpec dia
-  --(dia # translateX 0 # translateY (-300))
+main = renderRasterific "test-render.png" sizeSpec dia
