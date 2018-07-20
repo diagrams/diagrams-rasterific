@@ -1,0 +1,1 @@
+- Require `Rasterific-0.7.3` to fix PDF rendering of zero-width paths ([#43](https://github.com/diagrams/diagrams-rasterific/issues/43))
