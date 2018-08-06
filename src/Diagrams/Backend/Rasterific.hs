@@ -176,26 +176,39 @@ instance TypeableFloat n => Backend Rasterific V2 n where
           }
     deriving Show
 
-  renderRTree _ opts t =
+  renderDUAL _ opts t d =
     R.renderDrawing (round w) (round h) bgColor r
     where
-      r       = runRenderM . runR . fromRTree $ t
+      r       = runRenderM . runR $ toRender t d
       V2 w h  = specToSize 100 (opts^.sizeSpec)
       bgColor = PixelRGBA8 0 0 0 0
 
   adjustDia c opts d = adjustDia2D sizeSpec c opts (d # reflectY)
 
-fromRTree :: TypeableFloat n => RTree Rasterific V2 n Annotation -> Render Rasterific V2 n
-fromRTree (Node n rs) = case n of
-  RPrim p                 -> render Rasterific p
-  RStyle sty              -> R $ clip sty (local (<> sty) r)
-  RAnnot (OpacityGroup x) -> R $ mapReaderT (R.withGroupOpacity (round $ 255 * x)) r
-  _                       -> R r
-  where R r = F.foldMap fromRTree rs
+-- | Render a 'Rasterific' diagram to a pdf file with given width and height
+renderPdf :: TypeableFloat n => Int -> Int -> FilePath -> SizeSpec V2 n
+                             -> QDiagram Rasterific V2 n Any -> IO ()
+renderPdf w h outFile spec d = L.writeFile outFile bs
+  where
+    bs         = R.renderDrawingAtDpiToPDF w h 96 (runRenderM . runR $ toRender t d')
+    (_, t, d') = adjustDia Rasterific (RasterificOptions spec) d
+
+toRender :: (TypeableFloat n, Monoid' m)
+         => T2 n -> QDiagram Rasterific V2 n m -> Render Rasterific V2 n
+toRender = foldDia' renderPrim renderAnnot renderSty
+  where
+    renderPrim sty p = R $ local (const sty) r
+      where R r = render Rasterific p
+
+    renderAnnot a (R r) = R $ case a of
+      OpacityGroup x -> mapReaderT (R.withGroupOpacity (round $ 255 * x)) r
+      _              -> r
+
+    renderSty sty (R r) = R $ clip (view _clip sty) r
 
 -- | Clip a render using the Clip from the style.
-clip :: TypeableFloat n => Style V2 n -> RenderM n () -> RenderM n ()
-clip sty r = go (sty ^. _clip)
+clip :: TypeableFloat n => [Path V2 n] -> RenderM n () -> RenderM n ()
+clip paths r = go paths
   where
     go []     = r
     go (p:ps) = mapReaderT (R.withClipping $ R.fill (renderPath p)) (go ps)
@@ -416,19 +429,6 @@ writeJpeg quality outFile img = L.writeFile outFile bs
   where
     bs = encodeJpegAtQuality quality (pixelMap (convertPixel . dropTransparency) img)
 
--- | Render a 'Rasterific' diagram to a pdf file with given width and height
-renderPdf :: TypeableFloat n => Int -> Int -> FilePath -> SizeSpec V2 n
-                             -> QDiagram Rasterific V2 n Any -> IO ()
-renderPdf w h outFile spec d = L.writeFile outFile bs
-  where
-    bs    = R.renderDrawingAtDpiToPDF w h 96 (runRenderM . runR . fromRTree $ rtree)
-    rtree = rTree spec d
-
-rTree :: TypeableFloat n => SizeSpec V2 n -> QDiagram Rasterific V2 n Any
-                         -> RTree Rasterific V2 n Annotation
-rTree spec d = toRTree g2o d'
-  where
-  (_, g2o, d') = adjustDia Rasterific (RasterificOptions spec) d
 
 -- | Render a 'Rasterific' diagram to a file with the given size. The
 --   format is determined by the extension (@.png@, @.tif@, @.bmp@, @.jpg@ and
