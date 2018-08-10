@@ -44,9 +44,9 @@ library
   default-language:    Haskell2010
   ghc-options:         -Wall
 
-test-suite test0
+test-suite test-render
   type:                exitcode-stdio-1.0
-  main-is:             test0.hs
+  main-is:             test-render.hs
   hs-source-dirs:      test
   build-depends:       base >= 4.2 && < 4.12,
                        diagrams-rasterific,
@@ -55,9 +55,20 @@ test-suite test0
   ghc-options:         -Wall
   default-language:    Haskell2010
 
-test-suite test1
+test-suite test-widths
   type:                exitcode-stdio-1.0
-  main-is:             test1.hs
+  main-is:             test-widths.hs
+  hs-source-dirs:      test
+  build-depends:       base >= 4.2 && < 4.12,
+                       diagrams-rasterific,
+                       diagrams-core >= 1.4 && < 1.5,
+                       diagrams-lib >= 1.4 && < 1.5
+  ghc-options:         -Wall
+  default-language:    Haskell2010
+
+test-suite test-size
+  type:                exitcode-stdio-1.0
+  main-is:             test-size.hs
   hs-source-dirs:      test
   build-depends:       base >= 4.2 && < 4.12,
                        diagrams-rasterific,
