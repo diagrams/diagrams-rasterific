@@ -221,7 +221,7 @@ drawText tr attrs (Text a str) = do
             Just (P (V2 xl yl), P (V2 xu yu)) -> R.V2 (-lerp' xt xu xl) (lerp' yt yu yl)
             Nothing                           -> R.V2 0 0
 
-  R.withTransformation (fromT2 (tr <> reflectionY))
+  R.withTransformation (fromT2 (tr <> scaling (1 / avgScale tr) <> reflectionY))
      (R.withTexture fTexture $ R.printTextAt fStyle fSize fAlign str)
 
 drawImage :: T2 Double -> DynamicImage -> Draw
