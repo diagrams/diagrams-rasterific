@@ -72,6 +72,8 @@ module Diagrams.Backend.Rasterific
 
   ) where
 
+import qualified Data.Sequence                       as Seq
+
 import           Diagrams.Backend
 import           Diagrams.Backend.Compile
 import           Diagrams.Prelude                    hiding (clip, opacity,
@@ -96,7 +98,7 @@ import           Graphics.Rasterific.Texture         (Gradient,
                                                       withSampler)
 import qualified Graphics.Rasterific.Transformations as R
 
-import           Control.Monad                       (join, when)
+import           Control.Monad                       (join)
 import           Data.ByteString.Lazy                (ByteString)
 import qualified Data.ByteString.Lazy                as L (writeFile)
 import qualified Data.Foldable                       as F
@@ -104,6 +106,7 @@ import           Data.Hashable                       (Hashable (..))
 import           Data.Maybe                          (fromMaybe)
 import           Data.Sequence                       (Seq)
 import           Data.Typeable
+import           Prelude                             hiding (lines)
 import           System.FilePath                     (takeExtension)
 
 import           Diagrams.Backend.Rasterific.Text
@@ -189,19 +192,50 @@ drawPath s path = do
       lDash    = fmap fromDashing (getAttr _Dashing s)
 
   -- XXX Need to separate lines and loops
-  let canFill = (attr _FillTexture ^? _AC) /= Just transparent
+  -- let canFill = (attr _FillTexture ^? _AC) /= Just transparent
 
-  let prims = pathPrims path
+      strokeFunc prims =
+        R.withTexture lTexture $
+          case lDash of
+            Nothing      -> F.for_ prims $ R.stroke lWidth lJoin lCaps
+            Just (d,off) ->
+              F.for_ prims $
+                R.dashedStrokeWithOffset off d lWidth lJoin lCaps
 
-  when canFill $
-    R.withTexture fTexture $ R.fillWithMethod fRule (concat prims)
+  F.for_ (collateTrails path) $ \case
+    Left lines  -> strokeFunc (linePrims lines)
+    Right loops ->
+      let prims = loopPrims loops
+       in do R.withTexture fTexture $ R.fillWithMethod fRule (concat prims)
+             strokeFunc prims
 
-  R.withTexture lTexture $
-    case lDash of
-      Nothing      -> F.for_ prims $ R.stroke lWidth lJoin lCaps
-      Just (d,off) ->
-        F.for_ prims $
-          R.dashedStrokeWithOffset off d lWidth lJoin lCaps
+  -- let prims = pathPrims path
+
+collateTrails :: Path V2 Double -> [Either [Located (Line V2 Double)] [Located (Loop V2 Double)]]
+collateTrails = collate . toListOf (each . _LocTrail)
+
+-- group together consecutive as and bs
+collate :: [Either a b] -> [Either [a] [b]]
+collate = \case
+  []           -> []
+  Left a : es  -> goL (a:) es
+  Right b : es -> goR (b:) es
+  where
+    goL f = \case
+      []           -> [Left (f [])]
+      Left a : es  -> goL (f . (a:)) es
+      Right b : es -> Left (f []) : goR (b:) es
+    goR f = \case
+      []           -> [Right (f [])]
+      Left a : es  -> Right (f []) : goL (a:) es
+      Right b : es -> goR (f . (b:)) es
+
+
+loopPrims :: [Located (Loop V2 Double)] -> [[R.Primitive]]
+loopPrims = pathPrims . Path . Seq.fromList . fmap (mapLoc ClosedTrail)
+
+linePrims :: [Located (Line V2 Double)] -> [[R.Primitive]]
+linePrims = pathPrims . Path . Seq.fromList . fmap (mapLoc OpenTrail)
 
 drawText :: T2 Double -> Attributes -> Text Double -> Draw
 drawText tr attrs (Text a str) = do
