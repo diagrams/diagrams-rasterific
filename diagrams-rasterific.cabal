@@ -59,7 +59,7 @@ test-suite test-widths
   type:                exitcode-stdio-1.0
   main-is:             test-widths.hs
   hs-source-dirs:      test
-  build-depends:       base >= 4.2 && < 4.12,
+  build-depends:       base >= 4.2 && < 4.13,
                        diagrams-rasterific,
                        diagrams-core >= 1.4 && < 1.5,
                        diagrams-lib >= 1.4 && < 1.5
