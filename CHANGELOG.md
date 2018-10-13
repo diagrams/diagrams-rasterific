@@ -1,3 +1,15 @@
+## [v1.4.1.1](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.1.1) (2018-10-12)
+
+- Require `Rasterific-0.7.4` to
+  - fix PDF rendering of zero-width paths ([#43](https://github.com/diagrams/diagrams-rasterific/issues/43))
+  - fix disappearing small elements ([#51](https://github.com/diagrams/diagrams-rasterific/issues/51))
+
+- Allow:
+    - `base-4.12` (GHC 8.6)
+    - `lens-4.17`
+    - `containers-0.6`
+    - `JuicyPixels-3.3`
+
 ## [v1.4.1](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.1) (2018-05-09)
 
     - Bug fix: stroke entire paths at once ([#42](https://github.com/diagrams/diagrams-rasterific/issues/42))
