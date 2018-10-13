@@ -1,0 +1,3 @@
+- Require `Rasterific-0.7.4` to
+  - fix PDF rendering of zero-width paths ([#43](https://github.com/diagrams/diagrams-rasterific/issues/43))
+  - fix disappearing small elements ([#51](https://github.com/diagrams/diagrams-rasterific/issues/51))

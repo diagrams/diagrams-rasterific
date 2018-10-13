@@ -448,7 +448,21 @@ renderRasterific outFile spec d =
     _      -> writePng outFile img
   where
     img = renderDia Rasterific (RasterificOptions spec) d
-    V2 w h = specToSize 100 spec
+    (w, h) = specToDims (aspectRatio d) spec
+
+aspectRatio :: (V a ~ V2, Enveloped a) => a -> N a
+aspectRatio d = h / w
+  where
+    V2 w h = boxExtents (boundingBox d)
+
+specToDims :: (Fractional a, Ord a) => a -> SizeSpec V2 a -> (a, a)
+specToDims ar s =
+  case getSpec s of
+    V2 (Just w) (Just h) -> (w, h)
+    V2 (Just w) Nothing  -> (w, ar * w)
+    V2 Nothing (Just h)  -> (h / ar, h)
+    V2 Nothing Nothing   -> (100, 100)
+
 
 -- | Render a 'Rasterific' diagram to an animated gif with the given
 --   size and uniform delay. Diagrams should be the same size.
