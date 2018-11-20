@@ -78,6 +78,7 @@ module Diagrams.Backend.Rasterific
     -- * Rendering
   , renderRasterific
   , renderPdf
+  , renderDiaPdf
   , size
 
   , writeJpeg
@@ -416,13 +417,20 @@ writeJpeg quality outFile img = L.writeFile outFile bs
   where
     bs = encodeJpegAtQuality quality (pixelMap (convertPixel . dropTransparency) img)
 
+-- | Render a 'Rasterific' diagram to a pdf bytestring with given width and height
+renderDiaPdf :: TypeableFloat n => Int -> Int -> SizeSpec V2 n
+                             -> QDiagram Rasterific V2 n Any -> ByteString
+renderDiaPdf w h spec d = bs
+  where
+    bs    = R.renderDrawingAtDpiToPDF w h 96 (runRenderM . runR . fromRTree $ rtree)
+    rtree = rTree spec d
+
 -- | Render a 'Rasterific' diagram to a pdf file with given width and height
 renderPdf :: TypeableFloat n => Int -> Int -> FilePath -> SizeSpec V2 n
                              -> QDiagram Rasterific V2 n Any -> IO ()
 renderPdf w h outFile spec d = L.writeFile outFile bs
   where
-    bs    = R.renderDrawingAtDpiToPDF w h 96 (runRenderM . runR . fromRTree $ rtree)
-    rtree = rTree spec d
+    bs = renderDiaPdf w h spec d
 
 rTree :: TypeableFloat n => SizeSpec V2 n -> QDiagram Rasterific V2 n Any
                          -> RTree Rasterific V2 n Annotation
