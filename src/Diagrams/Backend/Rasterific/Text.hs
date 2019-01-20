@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeFamilies          #-}
 
 -------------------------------------------------------------------------------
 -- |
@@ -23,15 +23,15 @@ module Diagrams.Backend.Rasterific.Text
   , textBoundingBox
   ) where
 
-import           Graphics.Text.TrueType    hiding (BoundingBox)
+import           Graphics.Text.TrueType hiding (BoundingBox)
 
 import           Diagrams.Prelude
+import           Diagrams.TwoD.Text     hiding (Font)
 import           Diagrams.Types
-import           Diagrams.TwoD.Text        hiding (Font)
 
-import           Data.FileEmbed            (embedDir)
-import           Data.ByteString           (ByteString)
-import           Data.ByteString.Lazy      (fromStrict)
+import           Data.ByteString        (ByteString)
+import           Data.ByteString.Lazy   (fromStrict)
+import           Data.FileEmbed         (embedDir, makeRelativeToProject)
 
 -- | Get the 'BoundingBox' for some font with the origin at the start of
 --   the baseline.
@@ -74,7 +74,7 @@ fromFontStyle FontSlantOblique FontWeightNormal = openSansItalic
 fromFontStyle _                _                = openSansRegular
 
 fonts :: [(FilePath,ByteString)]
-fonts = $(embedDir "fonts")
+fonts = $(makeRelativeToProject "fonts" >>= embedDir)
 
 -- Read a static font file which is included with the package.
 staticFont :: String -> Font
