@@ -1,3 +1,7 @@
+## [v1.4.2](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.2) (2019-05-02)
+
+    - Add `renderPdfBS` to output PDF in-memory.
+
 ## [v1.4.1.1](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.1.1) (2018-10-12)
 
 - Require `Rasterific-0.7.4` to
