@@ -79,6 +79,7 @@ module Diagrams.Backend.Rasterific
   , renderRasterific
   , renderPdf
   , renderPdfBS
+  , renderPdfBSWithDPI
   , size
 
   , writeJpeg
@@ -126,6 +127,7 @@ import           Graphics.Rasterific.Texture         (Gradient,
                                                       withSampler)
 
 import qualified Graphics.Rasterific.Transformations as R
+import           Graphics.Text.TrueType              (Dpi)
 
 import           Control.Monad.Reader
 import           Diagrams.Backend.Rasterific.Text
@@ -417,13 +419,27 @@ writeJpeg quality outFile img = L.writeFile outFile bs
   where
     bs = encodeJpegAtQuality quality (pixelMap (convertPixel . dropTransparency) img)
 
+
+-- | Render a 'Rasterific' diagram to a pdf bytestring with given width,
+-- height, & DPI.
+renderPdfBSWithDPI
+    :: TypeableFloat n
+    => Int
+    -> Int
+    -> Dpi
+    -> SizeSpec V2 n
+    -> QDiagram Rasterific V2 n Any
+    -> ByteString
+renderPdfBSWithDPI w h dpi spec d = bs
+  where
+    bs    = R.renderDrawingAtDpiToPDF w h dpi (runRenderM . runR $ fromRTree rtree)
+    rtree = rTree spec d
+
 -- | Render a 'Rasterific' diagram to a pdf bytestring with given width and height
 renderPdfBS :: TypeableFloat n => Int -> Int -> SizeSpec V2 n
                              -> QDiagram Rasterific V2 n Any -> ByteString
-renderPdfBS w h spec d = bs
-  where
-    bs    = R.renderDrawingAtDpiToPDF w h 96 (runRenderM . runR . fromRTree $ rtree)
-    rtree = rTree spec d
+renderPdfBS w h =
+    renderPdfBSWithDPI w h 96
 
 -- | Render a 'Rasterific' diagram to a pdf file with given width and height
 renderPdf :: TypeableFloat n => Int -> Int -> FilePath -> SizeSpec V2 n
