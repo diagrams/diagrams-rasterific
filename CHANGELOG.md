@@ -1,6 +1,9 @@
-## [v1.4.2](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.2) (2019-05-02)
+## [v1.4.2](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.2) (2019-12-09)
 
-    - Add `renderPdfBS` to output PDF in-memory.
+    - Add `renderPdfBS` function to output PDF in-memory.
+    - Add `renderPdfBSWithDPI` to allow additionally specifying the DPI.
+    - Bug fix: include fonts in `extra-source-files` rather than
+      `data-files`.
 
 ## [v1.4.1.1](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.1.1) (2018-10-12)
 
