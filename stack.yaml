@@ -15,7 +15,7 @@
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: lts-12.10
+resolver: lts-14.20
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -39,7 +39,11 @@ packages:
 - .
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
-# extra-deps: []
+extra-deps:
+- git: git@github.com:diagrams/active.git
+  commit: dcbcb7477f4714577e98f625593d1d6589244cdb
+- git: git@github.com:diagrams/diagrams-lib.git
+  commit: d3afa2f41bfb416be5713c033e3cd5a6eecd724a
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
