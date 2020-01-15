@@ -1,3 +1,5 @@
+{-# LANGUAGE ConstraintKinds           #-}
+{-# LANGUAGE CPP                       #-}
 {-# LANGUAGE DeriveDataTypeable        #-}
 {-# LANGUAGE DeriveGeneric             #-}
 {-# LANGUAGE ExistentialQuantification #-}
@@ -76,6 +78,8 @@ module Diagrams.Backend.Rasterific
     -- * Rendering
   , renderRasterific
   , renderPdf
+  , renderPdfBS
+  , renderPdfBSWithDPI
   , size
 
   , writeJpeg
@@ -123,6 +127,7 @@ import           Graphics.Rasterific.Texture         (Gradient,
                                                       withSampler)
 
 import qualified Graphics.Rasterific.Transformations as R
+import           Graphics.Text.TrueType              (Dpi)
 
 import           Control.Monad.Reader
 import           Diagrams.Backend.Rasterific.Text
@@ -201,9 +206,14 @@ clip sty r = go (sty ^. _clip)
 runR :: Render Rasterific V2 n -> RenderM n ()
 runR (R r) = r
 
+instance Semigroup (Render Rasterific V2 n) where
+  R rd1 <> R rd2 = R (rd1 >> rd2)
+
 instance Monoid (Render Rasterific V2 n) where
   mempty = R $ return ()
-  R rd1 `mappend` R rd2 = R (rd1 >> rd2)
+#if !MIN_VERSION_base(4,11,0)
+  mappend = (<>)
+#endif
 
 instance Hashable n => Hashable (Options Rasterific V2 n) where
   hashWithSalt s (RasterificOptions sz) = s `hashWithSalt` sz
@@ -332,8 +342,8 @@ renderPath p = (map . map) renderSeg (pathLocSegments p)
 mkStroke :: TypeableFloat n => n ->  R.Join -> (R.Cap, R.Cap) -> Maybe (R.DashPattern, n)
       -> [[R.Primitive]] -> RenderR ()
 mkStroke (realToFrac -> l) j c d primList =
-  maybe (mapM_ (R.stroke l j c) primList)
-        (\(dsh, off) -> mapM_ (R.dashedStrokeWithOffset (realToFrac off) dsh l j c) primList)
+  maybe (R.stroke l j c $ concat primList)
+        (\(dsh, off) -> R.dashedStrokeWithOffset (realToFrac off) dsh l j c $ concat primList)
         d
 
 instance TypeableFloat n => Renderable (Path V2 n) Rasterific where
@@ -409,13 +419,34 @@ writeJpeg quality outFile img = L.writeFile outFile bs
   where
     bs = encodeJpegAtQuality quality (pixelMap (convertPixel . dropTransparency) img)
 
+
+-- | Render a 'Rasterific' diagram to a pdf bytestring with given width,
+-- height, & DPI.
+renderPdfBSWithDPI
+    :: TypeableFloat n
+    => Int
+    -> Int
+    -> Dpi
+    -> SizeSpec V2 n
+    -> QDiagram Rasterific V2 n Any
+    -> ByteString
+renderPdfBSWithDPI w h dpi spec d = bs
+  where
+    bs    = R.renderDrawingAtDpiToPDF w h dpi (runRenderM . runR $ fromRTree rtree)
+    rtree = rTree spec d
+
+-- | Render a 'Rasterific' diagram to a pdf bytestring with given width and height
+renderPdfBS :: TypeableFloat n => Int -> Int -> SizeSpec V2 n
+                             -> QDiagram Rasterific V2 n Any -> ByteString
+renderPdfBS w h =
+    renderPdfBSWithDPI w h 96
+
 -- | Render a 'Rasterific' diagram to a pdf file with given width and height
 renderPdf :: TypeableFloat n => Int -> Int -> FilePath -> SizeSpec V2 n
                              -> QDiagram Rasterific V2 n Any -> IO ()
 renderPdf w h outFile spec d = L.writeFile outFile bs
   where
-    bs    = R.renderDrawingAtDpiToPDF w h 96 (runRenderM . runR . fromRTree $ rtree)
-    rtree = rTree spec d
+    bs = renderPdfBS w h spec d
 
 rTree :: TypeableFloat n => SizeSpec V2 n -> QDiagram Rasterific V2 n Any
                          -> RTree Rasterific V2 n Annotation
@@ -441,7 +472,21 @@ renderRasterific outFile spec d =
     _      -> writePng outFile img
   where
     img = renderDia Rasterific (RasterificOptions spec) d
-    V2 w h = specToSize 100 spec
+    (w, h) = specToDims (aspectRatio d) spec
+
+aspectRatio :: (V a ~ V2, Enveloped a) => a -> N a
+aspectRatio d = h / w
+  where
+    V2 w h = boxExtents (boundingBox d)
+
+specToDims :: (Fractional a, Ord a) => a -> SizeSpec V2 a -> (a, a)
+specToDims ar s =
+  case getSpec s of
+    V2 (Just w) (Just h) -> (w, h)
+    V2 (Just w) Nothing  -> (w, ar * w)
+    V2 Nothing (Just h)  -> (h / ar, h)
+    V2 Nothing Nothing   -> (100, 100)
+
 
 -- | Render a 'Rasterific' diagram to an animated gif with the given
 --   size and uniform delay. Diagrams should be the same size.
