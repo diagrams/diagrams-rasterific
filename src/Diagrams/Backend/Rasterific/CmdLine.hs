@@ -1,5 +1,5 @@
-{-# LANGUAGE ConstraintKinds   #-}
 {-# LANGUAGE CPP               #-}
+{-# LANGUAGE ConstraintKinds   #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell   #-}
 {-# LANGUAGE TupleSections     #-}
@@ -142,21 +142,11 @@ instance TypeableFloat n => Mainable [(String,QDiagram Rasterific V2 n Any)] whe
   mainRender = defaultMultiMainRender
 
 -- | @animMain@ is like 'defaultMain', but renders an animation
--- instead of a diagram.  It takes as input an animation and produces
--- a command-line program which will crudely \"render\" the animation
--- by rendering one image for each frame, named by extending the given
--- output file name by consecutive integers.  For example if the given
--- output file name is @foo\/blah.png@, the frames will be saved in
--- @foo\/blah001.png@, @foo\/blah002.png@, and so on (the number of
--- padding digits used depends on the total number of frames).  It is
--- up to the user to take these images and stitch them together into
--- an actual animation format (using, /e.g./ @ffmpeg@).
+--   instead of a diagram.  It takes as input an animation and produces
+--   a command-line program which will render the animation as an animated GIF.
 --
---   Of course, this is a rather crude method of rendering animations;
---   more sophisticated methods will likely be added in the future.
---
--- The @--fpu@ option can be used to control how many frames will be
--- output for each second (unit time) of animation.
+--   The @--fpu@ option can be used to control how many frames will be
+--   output for each second (unit time) of animation.
 animMain :: Animation Rasterific V2 Double -> IO ()
 animMain = mainWith
 
@@ -164,9 +154,13 @@ instance TypeableFloat n => Mainable (Active (QDiagram Rasterific V2 n Any)) whe
   type MainOpts (Active (QDiagram Rasterific V2 n Any)) =
     ((DiagramOpts, DiagramAnimOpts), DiagramLoopOpts)
 
-  mainRender (opts, l) d = do
-    defaultAnimMainRender chooseRender output opts d
+  mainRender ((opts, animOpts), l) anim = do
+    let frames = samples (animOpts ^. fpu) anim
+    mainRender (opts, defaultGifOpts) (map (, round (100 / (animOpts ^. fpu)) :: GifDelay) frames)
     defaultLoopRender l
+
+    where
+      defaultGifOpts = GifOpts False True Nothing
 
 -- | Make an animated gif main by pairing diagrams with a delay ('Int'
 --   measured in 100th seconds).
