@@ -166,15 +166,6 @@ instance TypeableFloat n => Mainable (Animation Rasterific V2 n) where
     defaultAnimMainRender chooseRender output opts d
     defaultLoopRender l
 
--- | Make an animated gif main by pairing diagrams with a delay ('Int'
---   measured in 100th seconds).
-gifMain :: [(Diagram Rasterific, GifDelay)] -> IO ()
-gifMain = mainWith
-
--- | Make an animated gif main with the same delay for each diagram.
-uniformGifMain :: GifDelay -> [Diagram Rasterific] -> IO ()
-uniformGifMain i = mainWith . map (,i)
-
 -- | Extra options for animated GIFs.
 data GifOpts = GifOpts { _dither     :: Bool
                        , _noLooping  :: Bool
@@ -221,4 +212,13 @@ instance TypeableFloat n => Mainable [(QDiagram Rasterific V2 n Any, GifDelay)] 
         | otherwise        = maybe LoopingForever (LoopingRepeat . fromIntegral)
                                (gOpts^.loopRepeat)
       pOpts = defaultPaletteOptions {enableImageDithering=gOpts^.dither}
+
+-- | Make an animated gif main by pairing diagrams with a delay ('Int'
+--   measured in 100th seconds).
+gifMain :: [(Diagram Rasterific, GifDelay)] -> IO ()
+gifMain = mainWith
+
+-- | Make an animated gif main with the same delay for each diagram.
+uniformGifMain :: GifDelay -> [Diagram Rasterific] -> IO ()
+uniformGifMain i = mainWith . map (,i)
 
