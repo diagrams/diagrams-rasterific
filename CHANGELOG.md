@@ -1,3 +1,12 @@
+## [v1.4.2.1](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.2.1) (2021-05-28)
+
+GHC 9.0 compatibility.
+
+- Allow:
+    - `base-4.15` (GHC 9.0)
+    - `diagrams-core-1.5`
+    - `lens-5.0`
+
 ## [v1.4.2](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.2) (2019-12-09)
 
     - Add `renderPdfBS` function to output PDF in-memory.
