@@ -1,3 +1,7 @@
+## [v1.4.2.1-r1](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.2.1-r1) (2021-06-07)
+
+- Allow `bytestring-0.11` and `optparse-applicative-0.16`.
+
 ## [v1.4.2.1](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.2.1) (2021-05-28)
 
 GHC 9.0 compatibility.
