@@ -82,7 +82,7 @@ module Diagrams.Backend.Rasterific.CmdLine
 
 import           Diagrams.Backend.CmdLine
 import           Diagrams.Backend.Rasterific
-import           Diagrams.Prelude            hiding (height, interval, option,
+import           Diagrams.Prelude            hiding (height, interval,
                                               output, width)
 
 import qualified Data.ByteString.Lazy        as L (writeFile)
