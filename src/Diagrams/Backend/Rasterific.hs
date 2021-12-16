@@ -177,7 +177,7 @@ instance TypeableFloat n => Backend Rasterific V2 n where
   data Options Rasterific V2 n = RasterificOptions
           { _sizeSpec  :: SizeSpec V2 n -- ^ The requested size of the output
           }
-    deriving Show
+    deriving (Show, Eq)
 
   renderRTree _ opts t =
     R.renderDrawing (round w) (round h) bgColor r
