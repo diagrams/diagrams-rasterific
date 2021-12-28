@@ -1,3 +1,9 @@
+## [v1.4.2.2](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.2.2) (2021-12-28)
+
+GHC 9.2 compatibility and dependency bound updates:
+- Allow `base-4.16`, `hashable-1.4`, `lens-5.1`.
+- Add `Eq` instance for `Options Rasterific`.
+
 ## [v1.4.2.1-r1](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.2.1-r1) (2021-06-07)
 
 - Allow `bytestring-0.11` and `optparse-applicative-0.16`.
