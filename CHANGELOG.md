@@ -1,3 +1,7 @@
+## [v1.4.2.2-r1](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.2.2-r1) (2022-02-02)
+
+- Allow `optparse-applicative-0.17`
+
 ## [v1.4.2.2](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.2.2) (2021-12-28)
 
 GHC 9.2 compatibility and dependency bound updates:
