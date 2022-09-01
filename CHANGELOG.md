@@ -1,3 +1,7 @@
+## [v1.4.2.2-r2](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.2.2-r2) (2022-09-01)
+
+- Allow `base-4.17`, `lens-5.2`, and test with GHC 9.4
+
 ## [v1.4.2.2-r1](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.2.2-r1) (2022-02-02)
 
 - Allow `optparse-applicative-0.17`
