@@ -129,6 +129,7 @@ import           Graphics.Rasterific.Texture         (Gradient,
 import qualified Graphics.Rasterific.Transformations as R
 import           Graphics.Text.TrueType              (Dpi)
 
+import           Control.Monad                       (when)
 import           Control.Monad.Reader
 import           Diagrams.Backend.Rasterific.Text
 
