@@ -131,7 +131,7 @@ import qualified Graphics.Rasterific.Transformations as R
 import           Graphics.Text.TrueType              (Dpi)
 
 import           Control.Monad                       (when)
-import           Control.Monad.Reader
+import           Control.Monad.Reader                (ReaderT, ask, lift, local, mapReaderT, runReaderT)
 import           Diagrams.Backend.Rasterific.Text
 
 import           Data.ByteString.Lazy                (ByteString)
