@@ -11,7 +11,8 @@ maintainer:          diagrams-discuss@googlegroups.com
 bug-reports:         http://github.com/diagrams/diagrams-rasterific/issues
 category:            Graphics
 build-type:          Simple
-extra-source-files:  README.md, CHANGELOG.md, fonts/*.ttf
+extra-source-files:  fonts/*.ttf
+extra-doc-files:     README.md, CHANGELOG.md
 tested-with:         GHC ==8.4.4 || ==8.6.5 || ==8.8.4 || ==8.10.7 || ==9.0.2 || ==9.2.7 || ==9.4.5 || ==9.6.1
 cabal-version:       1.18
 Source-repository head
