@@ -1,3 +1,8 @@
+## [v1.4.2.3-r1](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.2.3-r1) (2024-01-17)
+
+- Allow `base-4.19` and `bytestring-0.12`
+- Test on GHC 9.8
+
 ## [v1.4.2.3](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.2.3) (2023-05-30)
 
 - Allow `base-4.18`, `mtl-2.3`, `optparse-applicative-0.18`
