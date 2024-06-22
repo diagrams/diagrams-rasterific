@@ -1,3 +1,8 @@
+## [v1.4.2.3-r2](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.2.3-r2) (2024-06-22)
+
+- Allow `base-4.20`, `lens-5.3`, `containers-0.7`, and `filepath-1.5`
+- Test on GHC 9.10
+
 ## [v1.4.2.3-r1](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.2.3-r1) (2024-01-17)
 
 - Allow `base-4.19` and `bytestring-0.12`
