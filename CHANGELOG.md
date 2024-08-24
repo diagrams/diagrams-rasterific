@@ -1,3 +1,7 @@
+## [v1.4.2.3-r3](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.2.3-r3) (2024-08-24)
+
+- Allow `hashable-1.5`
+
 ## [v1.4.2.3-r2](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.2.3-r2) (2024-06-22)
 
 - Allow `base-4.20`, `lens-5.3`, `containers-0.7`, and `filepath-1.5`
