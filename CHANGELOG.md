@@ -1,3 +1,7 @@
+## [v1.4.3](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.3) (2024-10-30)
+
+- Require `data-default-0.8`
+
 ## [v1.4.2.3-r3](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.2.3-r3) (2024-08-24)
 
 - Allow `hashable-1.5`
