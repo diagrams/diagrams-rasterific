@@ -1,3 +1,11 @@
+## [v1.5](https://github.com/diagrams/diagrams-rasterific/tree/v1.5) (2025-03-28)
+
+- allow `base-4.21`
+- allow `diagrams-lib-1.5`
+- Test on GHC 9.12
+- Remove no longer supported `DiagramLoopOpts`
+- bump version to 1.5
+
 ## [v1.4.3](https://github.com/diagrams/diagrams-rasterific/tree/v1.4.3) (2024-10-30)
 
 - Require `data-default-0.8`
