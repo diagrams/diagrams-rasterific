@@ -1,3 +1,7 @@
+## [v1.5-r1](https://github.com/diagrams/diagrams-rasterific/tree/v1.5-r1) (2025-06-13)
+
+- Allow `optparse-applicative-0.19`
+
 ## [v1.5](https://github.com/diagrams/diagrams-rasterific/tree/v1.5) (2025-03-28)
 
 - allow `base-4.21`
