@@ -132,7 +132,7 @@ instance Backend Rasterific where
   type Result  Rasterific = R.Drawing PixelRGBA8 ()
   data Options Rasterific = RasterificOptions
     { rasterificSizeSpec  :: SizeSpec V2 Int
-    } deriving Show
+    } deriving (Show, Eq)
 
   backendInfo _ = rasterificInfo
 
