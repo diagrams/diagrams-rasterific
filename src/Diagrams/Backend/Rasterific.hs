@@ -197,10 +197,9 @@ drawPath s path = do
       strokeFunc prims =
         R.withTexture lTexture $
           case lDash of
-            Nothing      -> F.for_ prims $ R.stroke lWidth lJoin lCaps
+            Nothing      -> R.stroke lWidth lJoin lCaps (concat prims)
             Just (d,off) ->
-              F.for_ prims $
-                R.dashedStrokeWithOffset off d lWidth lJoin lCaps
+              R.dashedStrokeWithOffset off d lWidth lJoin lCaps (concat prims)
 
   F.for_ (collateTrails path) $ \case
     Left lines  -> strokeFunc (linePrims lines)
