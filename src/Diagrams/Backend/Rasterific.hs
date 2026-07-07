@@ -51,6 +51,7 @@ module Diagrams.Backend.Rasterific
     -- * Rendering
   , renderRasterific
   , renderPdf
+  , renderPdfWithDPI
   , renderImage
 
   -- , writeJpeg
@@ -97,6 +98,7 @@ import           Graphics.Rasterific.Texture         (Gradient,
                                                       uniformTexture,
                                                       withSampler)
 import qualified Graphics.Rasterific.Transformations as R
+import           Graphics.Text.TrueType              (Dpi)
 
 import           Control.Monad                       (join)
 import           Data.ByteString.Lazy                (ByteString)
@@ -359,11 +361,16 @@ pathPrims p = (map . map) segPrim (pathLocSegments p)
 
 -- Rendering -----------------------------------------------------------
 
--- | Render a 'Rasterific' diagram to a pdf file with given width and height
-renderPdf :: Options Rasterific -> Diagram V2 -> ByteString
-renderPdf opts dia = R.renderDrawingAtDpiToPDF w h 96 drawing
+-- | Render a 'Rasterific' diagram to a pdf bytestring with the given
+-- options & DPI.
+renderPdfWithDPI :: Dpi -> Options Rasterific -> Diagram V2 -> ByteString
+renderPdfWithDPI dpi opts dia = R.renderDrawingAtDpiToPDF w h dpi drawing
   where
     (fmap round -> V2 w h, _, drawing) = renderDiaT opts dia
+
+-- | Render a 'Rasterific' diagram to a pdf file with given width and height
+renderPdf :: Options Rasterific -> Diagram V2 -> ByteString
+renderPdf = renderPdfWithDPI 96
 
 renderImage :: SizeSpec V2 Int -> Diagram V2 -> Image PixelRGBA8
 renderImage sz dia = R.renderDrawing w h bgColor drawing
