@@ -167,6 +167,12 @@ renderPrimitive t2 attrs = \case
   Path_ path         -> Just $ drawPath attrs (transform t2 path)
   Text_ t            -> Just $ drawText t2 attrs t
   EmbeddedImage_ img -> Just $ drawImage t2 img
+  -- TODO(dia2): ImageExternal cannot be rendered here: the render fold
+  -- is pure (Draw = R.Drawing PixelRGBA8 ()) so the file cannot be read
+  -- at render time. Needs an API-level decision, e.g. a pre-pass like
+  -- externalToEmbedded from Diagrams.TwoD.Image. Render nothing for
+  -- now rather than erroring.
+  ExternalImage_ _ _ _ -> Just $ pure ()
   Prim _             -> Nothing
 
 renderAnnot :: Annotation V2 Double -> Draw -> Draw
