@@ -126,9 +126,6 @@ data Rasterific = Rasterific
 type instance V Rasterific = V2
 type instance N Rasterific = Double
 
-default2DAttrs :: Diagram V2 -> Diagram V2
-default2DAttrs = lineWidth medium
-
 -- From Diagrams.Core.Types.
 instance Backend Rasterific where
   type Result  Rasterific = R.Drawing PixelRGBA8 ()
@@ -139,7 +136,10 @@ instance Backend Rasterific where
   backendInfo _ = rasterificInfo
 
   renderDiaT opts dia = (sz, t2 <> reflectionY, drawing) where
-    (sz, t2, dia') = adjustSize2D (opts^.sizeSpec) (default2DAttrs dia # reflectY)
+    -- The standard 2D defaults are applied as backup attributes
+    -- ('backupDefault2DAttrs') so they do not override backup
+    -- attributes applied inside the diagram.
+    (sz, t2, dia') = adjustSize2D (opts^.sizeSpec) (backupDefault2DAttrs dia # reflectY)
     drawing        = render t2 dia'
 
 instance BackendBuild Rasterific where
@@ -188,6 +188,12 @@ clip ps r = foldr (\p -> R.withClipping (R.fill $ pathPrims p)) r ps
 
 drawPath :: Attributes -> Path V2 Double -> Draw
 drawPath s path = do
+  -- Per-prim 'def' fallbacks.  For the attributes covered by the root
+  -- 'backupDefault2DAttrs' (fill/line texture, line width) these are
+  -- unreachable through 'renderDiaT', but most attributes here
+  -- (opacity, fill rule, line join/cap, ...) have no root default and
+  -- rely on them, and staying total keeps 'render' usable on diagrams
+  -- without the root defaults.
   let attr :: (Default a, Typeable a) => Getting r a r -> r
       attr g   = fromMaybe (def^.g) $ getAttr g s
   let opa      = attr _Opacity
