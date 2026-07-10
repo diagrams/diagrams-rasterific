@@ -1,8 +1,7 @@
-{-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeFamilies          #-}
 
 -------------------------------------------------------------------------------
 -- |
@@ -24,14 +23,15 @@ module Diagrams.Backend.Rasterific.Text
   , textBoundingBox
   ) where
 
-import           Graphics.Text.TrueType    hiding (BoundingBox)
+import           Graphics.Text.TrueType hiding (BoundingBox)
 
 import           Diagrams.Prelude
-import           Diagrams.TwoD.Text        hiding (Font)
+import           Diagrams.TwoD.Text     hiding (Font)
+import           Diagrams.Types
 
-import           Data.FileEmbed            (embedDir)
-import           Data.ByteString           (ByteString)
-import           Data.ByteString.Lazy      (fromStrict)
+import           Data.ByteString        (ByteString)
+import           Data.ByteString.Lazy   (fromStrict)
+import           Data.FileEmbed         (embedDir, makeRelativeToProject)
 
 -- | Get the 'BoundingBox' for some font with the origin at the start of
 --   the baseline.
@@ -46,14 +46,12 @@ textBoundingBox f p s = fromCorners
 -- | Create a primitive text diagram from the given 'FontSlant',
 --   'FontWeight', and string, with baseline alignment, envelope and trace
 --   based on the 'BoundingBox' of the text.
-texterific' :: (TypeableFloat n, Renderable (Text n) b)
-            => FontSlant -> FontWeight -> String -> QDiagram b V2 n Any
-texterific' fs fw s = recommendFillColor black . fontSizeL 1
+texterific' :: FontSlant -> FontWeight -> String -> Diagram V2
+texterific' fs fw s = backupFillColor black . fontSizeL 1
                     . fontSlant fs . fontWeight fw
-                    $ mkQD (Prim $ Text mempty BaselineText s)
+                    $ mkQD (Prim $ Text BaselineText s)
                            (getEnvelope bb)
                            (getTrace bb)
-                           mempty
                            (getQuery bb)
   where
     bb = textBoundingBox fnt (PointSize 1) s
@@ -63,7 +61,7 @@ texterific' fs fw s = recommendFillColor black . fontSizeL 1
 --   baseline alignment, envelope and trace based on the 'BoundingBox'
 --   of the text.  Designed to be a replacement for the function 'text'
 --   in Diagrams.TwoD.Text.
-texterific :: (TypeableFloat n, Renderable (Text n) b) => String -> QDiagram b V2 n Any
+texterific :: String -> Diagram V2
 texterific s = texterific' FontSlantNormal FontWeightNormal s
 
 -- | Get an OpenSans font with the given 'FontSlant' and 'FontWeight'.
@@ -76,7 +74,7 @@ fromFontStyle FontSlantOblique FontWeightNormal = openSansItalic
 fromFontStyle _                _                = openSansRegular
 
 fonts :: [(FilePath,ByteString)]
-fonts = $(embedDir "fonts")
+fonts = $(makeRelativeToProject "fonts" >>= embedDir)
 
 -- Read a static font file which is included with the package.
 staticFont :: String -> Font
