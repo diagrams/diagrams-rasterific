@@ -13,7 +13,7 @@ category:            Graphics
 build-type:          Simple
 extra-source-files:  fonts/*.ttf
 extra-doc-files:     README.md, CHANGELOG.md
-tested-with:         GHC ==8.4.4 || ==8.6.5 || ==8.8.4 || ==8.10.7 || ==9.0.2 || ==9.2.8 || ==9.4.8 || ==9.6.5 || ==9.8.2 || ==9.10.1 || ==9.12.1
+tested-with:         GHC ==8.4.4 || ==8.6.5 || ==8.8.4 || ==8.10.7 || ==9.0.2 || ==9.2.8 || ==9.4.8 || ==9.6.7 || ==9.8.4 || ==9.10.3 || ==9.12.4 || ==9.14.1
 cabal-version:       1.18
 Source-repository head
   type:     git
@@ -25,9 +25,9 @@ library
                        Diagrams.Backend.Rasterific.Text
   hs-source-dirs:      src
   other-modules:       Paths_diagrams_rasterific
-  build-depends:       base >= 4.2 && < 4.22,
+  build-depends:       base >= 4.2 && < 4.23,
                        diagrams-core >= 1.4 && < 1.6,
-                       diagrams-lib >= 1.4 && < 1.6,
+                       diagrams-lib >= 1.4 && < 1.7,
                        hashable >= 1.1 && < 1.6,
                        Rasterific >= 0.7.4 && < 0.8,
                        FontyFruity >= 0.5 && < 0.6,
@@ -35,7 +35,7 @@ library
                        lens >= 4.0 && < 5.4,
                        mtl >= 2.1 && < 2.4,
                        data-default >= 0.8 && < 0.9,
-                       containers >= 0.5 && < 0.8,
+                       containers >= 0.5 && < 0.9,
                        filepath >= 1.2 && < 1.6,
                        optparse-applicative >= 0.13 && < 0.20,
                        bytestring >= 0.9 && < 0.13,
@@ -48,10 +48,10 @@ test-suite test-render
   type:                exitcode-stdio-1.0
   main-is:             test-render.hs
   hs-source-dirs:      test
-  build-depends:       base >= 4.2 && < 4.22,
+  build-depends:       base >= 4.2 && < 4.23,
                        diagrams-rasterific,
                        diagrams-core >= 1.4 && < 1.6,
-                       diagrams-lib >= 1.4 && < 1.6
+                       diagrams-lib >= 1.4 && < 1.7
   ghc-options:         -Wall
   default-language:    Haskell2010
 
@@ -59,10 +59,10 @@ test-suite test-widths
   type:                exitcode-stdio-1.0
   main-is:             test-widths.hs
   hs-source-dirs:      test
-  build-depends:       base >= 4.2 && < 4.22,
+  build-depends:       base >= 4.2 && < 4.23,
                        diagrams-rasterific,
                        diagrams-core >= 1.4 && < 1.6,
-                       diagrams-lib >= 1.4 && < 1.6
+                       diagrams-lib >= 1.4 && < 1.7
   ghc-options:         -Wall
   default-language:    Haskell2010
 
@@ -70,9 +70,9 @@ test-suite test-size
   type:                exitcode-stdio-1.0
   main-is:             test-size.hs
   hs-source-dirs:      test
-  build-depends:       base >= 4.2 && < 4.22,
+  build-depends:       base >= 4.2 && < 4.23,
                        diagrams-rasterific,
                        diagrams-core >= 1.4 && < 1.6,
-                       diagrams-lib >= 1.4 && < 1.6
+                       diagrams-lib >= 1.4 && < 1.7
   ghc-options:         -Wall
   default-language:    Haskell2010
