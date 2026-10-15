@@ -152,7 +152,7 @@ import           System.FilePath                     (takeExtension)
 --   backend you wanted to use, and (2) as an argument to the
 --   'Backend' and 'Renderable' type classes.
 data Rasterific = Rasterific
-  deriving (Eq,Ord,Read,Show,Typeable)
+  deriving (Eq,Ord,Read,Show)
 
 type B = Rasterific
 
