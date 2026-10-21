@@ -140,7 +140,6 @@ import qualified Data.Foldable                       as F
 import           Data.Hashable                       (Hashable (..))
 import           Data.Maybe                          (fromMaybe)
 import           Data.Tree
-import           Data.Typeable
 import           Data.Word                           (Word8)
 
 import           System.FilePath                     (takeExtension)
@@ -321,7 +320,9 @@ rasterificPtTransf t = over rv2 (papply t)
 rasterificMatTransf :: TypeableFloat n => T2 n -> R.Transformation
 rasterificMatTransf tr = R.Transformation a c e b d f
   where
-    [[a, b], [c, d], [e, f]] = map realToFrac <$> matrixHomRep tr
+    (a, b, c, d, e, f) = case map realToFrac <$> matrixHomRep tr of
+      [[a', b'], [c', d'], [e', f']] -> (a', b', c', d', e', f')
+      _ -> (0, 0, 0, 0, 0, 0)
 
 -- Note: Using view patterns confuses ghc to think there are missing patterns,
 -- so we avoid them here.
