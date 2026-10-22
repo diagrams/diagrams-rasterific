@@ -86,7 +86,7 @@ import           Diagrams.Prelude            hiding (height, interval,
                                               output, width)
 
 import qualified Data.ByteString.Lazy        as L (writeFile)
-
+import qualified Options.Applicative         as Opt
 import           Options.Applicative
 
 -- | 'mainWith' specialised to 'Diagram' 'Rasterific'.
@@ -180,7 +180,7 @@ instance Parseable GifOpts where
                    <*> switch
                        ( long "looping-off"
                       <> help "Turn looping off" )
-                   <*> ( optional . option auto)
+                   <*> ( optional . Opt.option auto)
                        ( long "loop-repeat"
                       <> help "Number of times to repeat" )
 
