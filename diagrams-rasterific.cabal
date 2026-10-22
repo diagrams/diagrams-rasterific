@@ -26,6 +26,7 @@ library
   hs-source-dirs:      src
   other-modules:       Paths_diagrams_rasterific
   build-depends:       base >= 4.2 && < 4.23,
+                       diagrams-core >= 1.4 && < 1.6,
                        diagrams-lib >= 1.4 && < 1.7,
                        hashable >= 1.1 && < 1.6,
                        Rasterific >= 0.7.4 && < 0.8,
