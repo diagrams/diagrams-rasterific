@@ -1,3 +1,10 @@
+## [v1.5.0.1](https://github.com/diagrams/diagrams-rasterific/tree/v1.5.0.1) (2026-11-10)
+
+- Allow `base-4.22`, `diagrams-lib-1.6`, and `containers-0.8`
+- Remove unnecessary dependencies
+- Test on GHC 9.14
+- Fix warnings
+
 ## [v1.5-r1](https://github.com/diagrams/diagrams-rasterific/tree/v1.5-r1) (2025-06-13)
 
 - Allow `optparse-applicative-0.19`
